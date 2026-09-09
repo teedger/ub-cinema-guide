@@ -1,295 +1,139 @@
 {% extends "base.html" %}
 
-{% block title %}Now Showing - UB Cinema Guide{% endblock %}
+{% block title %}UB Cinema Guide{% endblock %}
+
+{% block style %}
+        .hero { position: relative; overflow: hidden; }
+        .hero-bg { position: absolute; inset: -40px; background-size: cover; background-position: center 20%; filter: blur(40px) saturate(1.1); opacity: .55; transform: scale(1.1); }
+        .hero-shade { position: absolute; inset: 0; background: radial-gradient(ellipse 45% 70% at 26% 40%, rgba(255,255,255,.10), transparent 70%), linear-gradient(180deg, rgba(14,14,14,.55), #0e0e0e 96%); }
+        .hero-grid { position: relative; display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 48px; padding-top: 56px; align-items: end; }
+        .hero-poster { display: block; aspect-ratio: 2 / 3; background: #1a1a1a; box-shadow: 0 40px 80px -30px #000; border: 1px solid rgba(255,255,255,.12); overflow: hidden; }
+        .hero-poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .hero-kicker { font-size: 13px; color: var(--fg-2); font-weight: 700; }
+        .hero-title { display: block; font-size: clamp(44px, 7.5vw, 96px); line-height: .95; margin-top: 10px; text-decoration: none; text-wrap: balance; }
+        .hero-meta { font-size: 13px; color: var(--muted); margin-top: 12px; font-weight: 600; }
+        .hero-groups { display: flex; flex-wrap: wrap; gap: 28px; margin-top: 26px; min-height: 70px; }
+        .group-head { font-size: 13px; font-weight: 800; display: flex; align-items: center; gap: 7px; }
+        .group-head .branch { color: var(--muted); font-weight: 600; }
+        .group-times { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+        .hero-more { display: inline-block; margin-top: 26px; font-size: 12px; color: var(--muted); font-weight: 700; letter-spacing: .06em; text-decoration: none; }
+        .hero-more:hover { color: var(--fg); }
+        .none { font-size: 13px; color: var(--muted); font-weight: 600; }
+
+        .filters { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding-top: 56px; flex-wrap: wrap; }
+        .count { font-size: 12px; color: var(--muted); font-weight: 700; }
+        .pills { display: flex; gap: 4px; flex-wrap: wrap; }
+
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 28px 20px; padding-top: 24px; padding-bottom: 64px; flex: 1; }
+        .card { cursor: pointer; opacity: .75; transition: opacity .2s, transform .2s; }
+        .card:hover, .card.sel { opacity: 1; }
+        .card:hover { transform: translateY(-6px); }
+        .card .poster { position: relative; aspect-ratio: 2 / 3; background: #1a1a1a; border: 1px solid transparent; overflow: hidden; }
+        .card.sel .poster { border-color: var(--fg); }
+        .card .poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .card .dots { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; gap: 4px; }
+        .card .dots span { width: 6px; height: 6px; border-radius: 50%; }
+        .card .title { font-size: 22px; letter-spacing: .03em; margin-top: 10px; line-height: 1.05; }
+        .card .meta { font-size: 11px; color: var(--muted); margin-top: 4px; font-weight: 600; }
+        .empty { padding: 80px 0; text-align: center; color: var(--muted); font-weight: 600; grid-column: 1 / -1; }
+
+        @media (max-width: 760px) {
+            .hero-grid { grid-template-columns: 1fr; gap: 24px; padding-top: 28px; }
+            .hero-poster { width: 160px; }
+            .hero-groups { gap: 18px; }
+            .filters { padding-top: 36px; }
+            .grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 22px 14px; }
+            .card .title { font-size: 18px; }
+        }
+{% endblock %}
+
+{% block topbar %}
+    <a class="brand" href="{{ home_href }}">UB Cinema Guide</a>
+    <div class="daystrip" id="days"></div>
+    <div class="topbar-side">
+        {% if not static_mode %}<a href="/watchlist">Watchlist</a>{% endif %}
+        <input class="search" id="q" type="search" placeholder="Search title or genre" autocomplete="off">
+    </div>
+{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>🎬 Now Showing in Ulaanbaatar</h1>
-    <p>Every film at Urgoo, Tengis and Prime Cineplex: which screen, what time, and a direct booking link when the cinema offers one.</p>
-</div>
-
-<div class="action-bar">
-    {% if not static_mode %}
-    <button id="scrapeBtn" class="btn btn-primary" onclick="startScrape()">🔄 Refresh Data</button>
-    {% endif %}
-    <div id="statusBadge" class="status-badge">📊 {{ movies | length }} films loaded</div>
-    {% if meta.scraped_at %}
-    <div class="status-badge">🕐 Scraped {{ meta.scraped_at }}</div>
-    {% endif %}
-    {% for name, info in meta.cinemas.items() %}
-    <div class="status-badge" title="{{ info.error or '' }}">{{ '⚠️' if info.error else '✅' }} {{ name }}: {{ info.count }}</div>
-    {% endfor %}
-</div>
-
-<div class="toolbar">
-    <div class="toolbar-group" id="dateChips"><span class="toolbar-label">Date</span></div>
-    <div class="toolbar-group" id="cinemaChips"><span class="toolbar-label">Cinema</span></div>
-    <div class="toolbar-group">
-        <input class="search-input" id="searchInput" type="search" placeholder="Search title or genre..." autocomplete="off">
+    <div class="hero" id="hero">
+        <div class="hero-bg" id="heroBg"></div>
+        <div class="hero-shade"></div>
+        <div class="wrap hero-grid" id="heroGrid"></div>
     </div>
-    <div class="toolbar-group">
-        <button class="chip" id="viewFilm" onclick="setView('film')">By film</button>
-        <button class="chip" id="viewCinema" onclick="setView('cinema')">By cinema</button>
-        <label class="toggle-label"><input type="checkbox" id="hidePast" checked> hide past times</label>
+
+    <div class="wrap filters">
+        <div class="count" id="count"></div>
+        <div class="pills" id="pills"></div>
     </div>
-</div>
-<div class="legend">
-    <span><span class="time-chip direct">21:20</span> opens the seat picker for that exact show</span>
-    <span><span class="time-chip indirect">21:20</span> opens the film page (no per-show link on that site)</span>
-</div>
 
-<div class="stats-grid">
-    <div class="stat-card"><div class="stat-value" id="statFilms">-</div><div class="stat-label">Films</div></div>
-    <div class="stat-card"><div class="stat-value" id="statShows">-</div><div class="stat-label">Screenings</div></div>
-    <div class="stat-card"><div class="stat-value" id="statScreens">-</div><div class="stat-label">Screens / branches</div></div>
-</div>
-
-<div id="content"></div>
+    <div class="wrap grid" id="grid"></div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
 const DATA = {{ movies | tojson }};
-const META = {{ meta | tojson }};
-const CINEMA_CLASS = { "Urgoo": "cinema-urgoo", "Tengis": "cinema-tengis", "Prime Cineplex": "cinema-prime" };
-const ALL_CINEMAS = ["Urgoo", "Tengis", "Prime Cineplex"].filter(c => DATA.some(m => m.cinemas.some(x => x.name === c)));
-const ALL_DATES = [...new Set(DATA.flatMap(m => m.dates))].sort();
+const FILM_HREF = {{ film_href | tojson }};
+const filmHref = id => FILM_HREF.replace('{id}', encodeURIComponent(id));
+const state = { sel: TODAY, spot: null, cinema: null, query: '' };
+try { const q = new URLSearchParams(location.search); if (q.get('date')) state.sel = q.get('date'); if (q.get('film')) state.spot = q.get('film'); } catch (e) {}
 
-const now = new Date();
-const TODAY = localISO(now);
-const NOW_HM = now.toTimeString().slice(0, 5);
+function render(scrollToHero = false) {
+    dayStrip(document.getElementById('days'), state.sel, id => { state.sel = id; render(); });
 
-const state = {
-    date: ALL_DATES.includes(TODAY) ? TODAY : (ALL_DATES[0] || ""),
-    cinemas: new Set(ALL_CINEMAS),
-    query: "",
-    view: "film",
-    hidePast: true,
-};
-try { const v = localStorage.getItem("view"); if (v === "film" || v === "cinema") state.view = v; } catch (e) {}
+    const q = state.query.trim().toLowerCase();
+    const visible = DATA.map(m => ({ m, groups: groupsFor(m, state.sel, state.cinema) }))
+        .filter(x => x.groups.length && (!q || [x.m.title, ...Object.values(x.m.titles || {}), ...(x.m.genres || [])].join(' ').toLowerCase().includes(q)));
+    const spot = visible.find(x => x.m.id === state.spot) || visible[0];
+    if (spot) state.spot = spot.m.id;
 
-function localISO(d) {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
-function dateLabel(iso) {
-    if (!iso) return "All dates";
-    const d = new Date(iso + "T00:00:00");
-    const text = d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
-    const diff = Math.round((d - new Date(TODAY + "T00:00:00")) / 86400000);
-    return diff === 0 ? `Today · ${text}` : diff === 1 ? `Tomorrow · ${text}` : text;
-}
-function isPast(show) {
-    return !show.available || (show.date === TODAY && show.time < NOW_HM) || show.date < TODAY;
-}
-function showVisible(show) {
-    if (state.date && show.date !== state.date) return false;
-    if (state.hidePast && isPast(show)) return false;
-    return true;
-}
-function matchesQuery(movie) {
-    if (!state.query) return true;
-    const q = state.query.toLowerCase();
-    const hay = [movie.title, ...Object.values(movie.titles || {}), ...(movie.genres || [])].join(" ").toLowerCase();
-    return hay.includes(q);
-}
-function visibleCinemas(movie) {
-    return movie.cinemas
-        .filter(c => state.cinemas.has(c.name))
-        .map(c => ({ ...c, showtimes: c.showtimes.filter(showVisible) }));
-}
-
-function chip(show, withHall = true) {
-    const parts = [];
-    if (withHall && show.hall) parts.push(show.hall);
-    if (show.format) parts.push(show.format);
-    const sub = parts.join(" · ");
-    const direct = /sessions|ShoppingCart/.test(show.url);
-    const cls = ["time-chip", direct ? "direct" : "indirect", isPast(show) ? "past" : ""].join(" ");
-    const title = [show.end_time ? `ends ${show.end_time}` : "", direct ? "Book this show" : "Open film page"].filter(Boolean).join(" · ");
-    const inner = `${esc(show.time)}${sub ? `<small>${esc(sub)}</small>` : ""}`;
-    return show.url ? `<a class="${cls}" href="${esc(show.url)}" target="_blank" rel="noopener" title="${esc(title)}">${inner}</a>`
-                    : `<span class="${cls}">${inner}</span>`;
-}
-function groupBy(list, key) {
-    const map = new Map();
-    for (const item of list) { const k = key(item); if (!map.has(k)) map.set(k, []); map.get(k).push(item); }
-    return map;
-}
-function cinemaBlock(cinema, shows) {
-    const branches = groupBy(shows, s => s.branch || cinema.name);
-    const rows = [...branches.entries()].sort().map(([branch, list]) => `
-        <div class="branch-row">
-            <div class="branch-name">${esc(branch)}</div>
-            <div class="times">${list.sort((a, b) => a.time.localeCompare(b.time)).map(s => chip(s)).join("")}</div>
-        </div>`).join("");
-    return `<div class="cinema-block ${CINEMA_CLASS[cinema.name] || ""}">
-        <div class="cinema-name">${esc(cinema.name)} <a href="${esc(cinema.url)}" target="_blank" rel="noopener">film page ↗</a></div>
-        ${rows}</div>`;
-}
-
-function renderFilmView(movies) {
-    if (!movies.length) return `<div class="empty-state"><div class="empty-state-icon">🎬</div><h3>No screenings match</h3><p>Try another date, cinema or search term.</p></div>`;
-    return `<div class="movie-grid">${movies.map(movie => {
-        const cinemas = visibleCinemas(movie);
-        const shows = cinemas.flatMap(c => c.showtimes.map(s => ({ ...s, cinema: c })));
-        let schedule;
-        if (!shows.length) {
-            schedule = `<div class="no-shows">No screenings ${state.date ? "on this date" : "listed"}.</div>`;
-        } else if (state.date) {
-            schedule = cinemas.filter(c => c.showtimes.length).map(c => cinemaBlock(c, c.showtimes)).join("");
-        } else {
-            schedule = [...groupBy(shows, s => s.date).entries()].sort().map(([date, list]) => {
-                const byCinema = groupBy(list, s => s.cinema.name);
-                return `<div class="date-heading">${esc(dateLabel(date))}</div>` +
-                    [...byCinema.entries()].map(([name, l]) => cinemaBlock(l[0].cinema, l)).join("");
-            }).join("");
-        }
-        const badges = movie.cinemas.map(c => `<span class="cinema-badge ${CINEMA_CLASS[c.name] || ""}">${esc(c.name)}</span>`).join(" ");
-        const meta = [
-            movie.rating ? `<span class="meta-tag rating">${esc(movie.rating)}</span>` : "",
-            movie.duration_minutes ? `<span class="meta-tag">⏱️ ${movie.duration_minutes} min</span>` : (movie.duration ? `<span class="meta-tag">⏱️ ${esc(movie.duration)}</span>` : ""),
-            movie.start_date ? `<span class="meta-tag">📅 ${esc(movie.start_date)}</span>` : "",
-        ].join("");
-        return `<div class="movie-card">
-            <div class="movie-top">
-                ${movie.poster ? `<img class="poster" src="${esc(movie.poster)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<div class="poster"></div>`}
-                <div>
-                    <h3 class="movie-title">${esc(movie.title)}</h3>
-                    <div class="movie-meta">${meta}</div>
-                    ${movie.genres?.length ? `<div class="movie-meta"><span class="meta-tag">🎭 ${esc(movie.genres.join(", "))}</span></div>` : ""}
-                    <div class="movie-meta">${badges}</div>
-                </div>
-            </div>
-            ${movie.description ? `<div class="movie-content"><p class="movie-description clamp" onclick="this.classList.toggle('clamp')" title="Click to expand">${esc(movie.description)}</p></div>` : ""}
-            <div class="schedule">${schedule}</div>
-        </div>`;
-    }).join("")}</div>`;
-}
-
-function renderCinemaView(movies) {
-    const rows = [];
-    for (const movie of movies) {
-        for (const cinema of visibleCinemas(movie)) {
-            for (const show of cinema.showtimes) rows.push({ movie, cinema, show });
-        }
+    // spotlight
+    const heroGrid = document.getElementById('heroGrid');
+    document.getElementById('heroBg').style.backgroundImage = spot && spot.m.poster ? `url("${spot.m.poster}")` : 'none';
+    if (!spot) {
+        heroGrid.innerHTML = `<div></div><div class="none" style="padding:40px 0 80px">No screenings match on ${esc(longDay(state.sel))}. Try another day, cinema or search.</div>`;
+    } else {
+        const m = spot.m;
+        const groups = spot.groups.map(g => `<div>
+            <div class="group-head"><span class="dot" style="background:${g.color}"></span>${esc(g.cinema)} <span class="branch">${esc(g.branch)}</span></div>
+            <div class="group-times">${g.times.map(s => timeChip(s)).join('')}</div></div>`).join('');
+        heroGrid.innerHTML = `
+            <a class="hero-poster" href="${filmHref(m.id)}">${m.poster ? `<img src="${esc(m.poster)}" alt="">` : ''}</a>
+            <div class="fadeup" style="min-width:0;padding-bottom:6px">
+                <div class="hero-kicker">${esc(relDay(state.sel))} · ${esc(longDay(state.sel))}</div>
+                <a class="hero-title oswald" href="${filmHref(m.id)}">${esc(m.title)}</a>
+                <div class="hero-meta">${esc(metaLine(m))}</div>
+                <div class="hero-groups">${groups || '<div class="none">No screenings on this day.</div>'}</div>
+                <a class="hero-more" href="${filmHref(m.id)}">FULL DETAILS →</a>
+            </div>`;
     }
-    if (!rows.length) return `<div class="empty-state"><div class="empty-state-icon">🎪</div><h3>No screenings match</h3><p>Try another date, cinema or search term.</p></div>`;
-    const byDate = state.date ? new Map([[state.date, rows]]) : groupBy(rows, r => r.show.date);
-    return [...byDate.entries()].sort().map(([date, dateRows]) => {
-        const sections = ALL_CINEMAS.filter(c => state.cinemas.has(c)).map(name => {
-            const cinemaRows = dateRows.filter(r => r.cinema.name === name);
-            if (!cinemaRows.length) return "";
-            const branches = groupBy(cinemaRows, r => r.show.branch || name);
-            const branchHtml = [...branches.entries()].sort().map(([branch, list]) => {
-                const films = groupBy(list, r => r.movie.id);
-                const filmHtml = [...films.values()].sort((a, b) => a[0].show.time.localeCompare(b[0].show.time)).map(list => {
-                    const m = list[0].movie;
-                    return `<div class="film-row">
-                        ${m.poster ? `<img class="thumb" src="${esc(m.poster)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<div class="thumb"></div>`}
-                        <div>
-                            <div class="film-title">${esc(m.title)} ${m.rating ? `<span class="meta-tag rating">${esc(m.rating)}</span>` : ""} ${m.duration_minutes ? `<span class="meta-tag">${m.duration_minutes} min</span>` : ""}</div>
-                            <div class="times">${list.map(r => r.show).sort((a, b) => a.time.localeCompare(b.time)).map(s => chip(s)).join("")}</div>
-                        </div>
-                    </div>`;
-                }).join("");
-                return `<div class="branch-section"><h3>${esc(branch)}</h3>${filmHtml}</div>`;
-            }).join("");
-            const url = cinemaRows[0].cinema.url;
-            return `<div class="cinema-section"><h2><span class="cinema-badge ${CINEMA_CLASS[name] || ""}">${esc(name)}</span> <a href="${esc(url)}" target="_blank" rel="noopener">open site ↗</a></h2>${branchHtml}</div>`;
-        }).join("");
-        return (state.date ? "" : `<h2 class="date-heading" style="font-size:1rem;margin:0.5rem 0 1rem">${esc(dateLabel(date))}</h2>`) + sections;
-    }).join("");
-}
 
-function render() {
-    const movies = DATA.filter(matchesQuery).filter(m => {
-        const cinemas = visibleCinemas(m);
-        if (!cinemas.length) return false;
-        // With a date selected only films that actually play that day are shown.
-        return !state.date || cinemas.some(c => c.showtimes.length);
-    });
-    const shows = movies.flatMap(m => visibleCinemas(m).flatMap(c => c.showtimes.map(s => ({ ...s, cinema: c.name }))));
-    document.getElementById("statFilms").textContent = movies.length;
-    document.getElementById("statShows").textContent = shows.length;
-    document.getElementById("statScreens").textContent = new Set(shows.map(s => `${s.cinema}|${s.branch}`)).size || "-";
-    document.getElementById("content").innerHTML = state.view === "cinema" ? renderCinemaView(movies) : renderFilmView(movies);
-    document.getElementById("viewFilm").classList.toggle("active", state.view === "film");
-    document.getElementById("viewCinema").classList.toggle("active", state.view === "cinema");
-}
-
-function renderChips() {
-    const dateBox = document.getElementById("dateChips");
-    dateBox.querySelectorAll(".chip").forEach(c => c.remove());
-    for (const iso of ["", ...ALL_DATES]) {
-        const b = document.createElement("button");
-        b.className = "chip" + (state.date === iso ? " active" : "");
-        b.textContent = dateLabel(iso);
-        b.onclick = () => { state.date = iso; renderChips(); render(); };
-        dateBox.appendChild(b);
+    // filters
+    const shows = visible.reduce((n, x) => n + x.groups.reduce((k, g) => k + g.times.length, 0), 0);
+    document.getElementById('count').textContent = `${visible.length} films · ${shows} screenings ${relDay(state.sel).toLowerCase()}`;
+    const pills = document.getElementById('pills'); pills.innerHTML = '';
+    for (const c of [null, ...ORDER.filter(n => DATA.some(m => m.cinemas.some(x => x.name === n)))]) {
+        const b = document.createElement('button');
+        b.className = `pill ${state.cinema === c ? 'on' : ''}`;
+        b.innerHTML = `<span class="dot" style="background:${c ? CIN[c] : '#f5f5f0'}"></span>${esc(c || 'All cinemas')}`;
+        b.onclick = () => { state.cinema = c; render(); };
+        pills.appendChild(b);
     }
-    const cinemaBox = document.getElementById("cinemaChips");
-    cinemaBox.querySelectorAll(".chip").forEach(c => c.remove());
-    for (const name of ALL_CINEMAS) {
-        const b = document.createElement("button");
-        b.className = `chip ${CINEMA_CLASS[name] || ""}` + (state.cinemas.has(name) ? " active" : "");
-        b.textContent = name;
-        b.onclick = () => {
-            if (state.cinemas.has(name) && state.cinemas.size > 1) state.cinemas.delete(name); else state.cinemas.add(name);
-            renderChips(); render();
-        };
-        cinemaBox.appendChild(b);
-    }
-}
-function setView(view) { state.view = view; try { localStorage.setItem("view", view); } catch (e) {} render(); }
 
-document.getElementById("searchInput").addEventListener("input", e => { state.query = e.target.value.trim(); render(); });
-document.getElementById("hidePast").addEventListener("change", e => { state.hidePast = e.target.checked; render(); });
-renderChips();
+    // grid
+    document.getElementById('grid').innerHTML = visible.length ? visible.map(({ m, groups }) => `
+        <div class="card ${m.id === state.spot ? 'sel' : ''}" data-id="${esc(m.id)}">
+            <div class="poster">${m.poster ? `<img src="${esc(m.poster)}" alt="" loading="lazy">` : ''}
+                <div class="dots">${[...new Set(groups.map(g => g.color))].map(c => `<span style="background:${c}"></span>`).join('')}</div></div>
+            <div class="title oswald">${esc(m.title)}</div>
+            <div class="meta">${esc(metaLine(m))}</div>
+        </div>`).join('') : `<div class="empty">Nothing to show for this day.</div>`;
+    document.querySelectorAll('.card').forEach(el => el.onclick = () => { state.spot = el.dataset.id; render(true); });
+
+    if (scrollToHero) document.getElementById('hero').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+document.getElementById('q').addEventListener('input', e => { state.query = e.target.value; render(); });
 render();
-
-{% if not static_mode %}
-// ---- Refresh button ----
-let isScraping = false, statusCheckInterval = null;
-async function startScrape() {
-    if (isScraping) return;
-    const btn = document.getElementById("scrapeBtn"), badge = document.getElementById("statusBadge");
-    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Scraping...';
-    badge.className = "status-badge scraping"; badge.innerHTML = '<span class="spinner"></span> Scraping all cinemas...';
-    try {
-        const data = await (await fetch("/api/scrape", { method: "POST" })).json();
-        if (data.status !== "started") throw new Error(data.message);
-        isScraping = true;
-        showToast("Scraping started. This takes a few minutes...");
-        statusCheckInterval = setInterval(checkStatus, 3000);
-    } catch (error) {
-        showToast("Error: " + error.message, "error");
-        btn.disabled = false; btn.innerHTML = "🔄 Refresh Data";
-    }
-}
-async function checkStatus() {
-    try {
-        const status = await (await fetch("/api/scrape/status")).json();
-        document.getElementById("statusBadge").innerHTML = status.message || "Scraping...";
-        if (!status.is_scraping && isScraping) {
-            isScraping = false; clearInterval(statusCheckInterval);
-            showToast(status.message || "Done!"); setTimeout(() => location.reload(), 1000);
-        }
-    } catch (error) { console.error("Status check failed:", error); }
-}
-{% endif %}
 </script>
-{% endblock %}
-
-{% block footer %}
-{% if static_mode %}
-<footer style="max-width: 1400px; margin: 2rem auto; padding: 0 2rem 2rem; color: var(--text-muted); font-size: 0.85rem;">
-    Listings are scraped automatically every day from
-    <a href="https://new.urgoo.mn" style="color: var(--text);">urgoo.mn</a>,
-    <a href="https://www.tengis.mn" style="color: var(--text);">tengis.mn</a> and
-    <a href="https://www.primecineplex.mn" style="color: var(--text);">primecineplex.mn</a>.
-    Last update: {{ meta.scraped_at }} (Ulaanbaatar time). Always confirm times on the cinema's own site before travelling.
-    · <a href="data/latest.json" style="color: var(--text);">raw data (JSON)</a>
-</footer>
-{% endif %}
 {% endblock %}

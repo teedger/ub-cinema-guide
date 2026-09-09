@@ -23,7 +23,7 @@ scraper_ultimate.py  runs all scrapers (in parallel), merges, writes output/late
 build_static.py      renders site/ (static copy of the guide) for GitHub Pages
 .github/workflows/   daily scrape + deploy to GitHub Pages
 web_app.py           Flask site reading output/latest.json
-templates/           base.html (styles), index.html (guide), watchlist.html
+templates/           base.html (shell + styles), index.html (home), film.html (film page), watchlist.html
 files/title_aliases.json   manual "this title == that title" overrides
 output/latest.json         what the website serves (+ showings_YYYYMMDD.json history)
 ```
@@ -95,11 +95,20 @@ cinema's title (`... IMAX`) is attached to that cinema's showtimes.
 
 ## Website
 
-- **By film**: one card per film with poster, rating, duration, genres, description and
-  the schedule grouped cinema → branch → times.
-- **By cinema**: cinema → branch (screen) → films with their times.
-- Filters: date, cinema, search, hide past times. Green-hover chips open the seat
-  picker for that exact show; the others open the film page.
+The UI follows the "Spotlight" direction from the Claude Design project
+(`UB Cinema Guide UI Mockups`): Oswald + Manrope on black, one film lit at a time.
+
+- **Home** (`templates/index.html`): a day strip in the top bar, a spotlight on one
+  film (poster, title, cinema → branch → time chips for the chosen day), a cinema
+  filter, search, and a poster grid. Clicking a poster moves the spotlight; the title
+  or "Full details" opens the film page.
+- **Film page** (`templates/film.html`, `/film/<id>` or `site/film/<id>.html`): hero
+  with poster and format/rating/duration chips, facts (genre, running time, rating,
+  release date, how each cinema lists the title), synopsis, a day strip with cinema
+  dots, the full cinema → branch → times list with booking links, a week-at-a-glance
+  table, and "also showing" posters.
+- Green-bordered time chips open the seat picker for that exact show; the others open
+  the film page. Past times are struck through.
 
 ## API
 

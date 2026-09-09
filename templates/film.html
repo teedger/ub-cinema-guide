@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+
+{% block title %}{{ film.title }} · UB Cinema Guide{% endblock %}
+
+{% block head %}
+    <meta property="og:title" content="{{ film.title }} · UB Cinema Guide">
+    <meta property="og:description" content="{{ film.genres | join(', ') }}{% if film.duration_minutes %} · {{ film.duration_minutes }} min{% endif %}{% if film.rating %} · {{ film.rating }}{% endif %} · showing at {{ film.cinemas | map(attribute='name') | join(', ') }}">
+    {% if film.poster %}<meta property="og:image" content="{{ film.poster }}">{% endif %}
+{% endblock %}
+
+{% block style %}
+        .back { font-size: 12px; color: var(--muted); font-weight: 700; text-decoration: none; white-space: nowrap; }
+        .hero { position: relative; min-height: 460px; display: flex; align-items: flex-end; overflow: hidden; }
+        .hero-bg { position: absolute; inset: -40px; background-size: cover; background-position: center 20%; filter: blur(40px) saturate(1.1); opacity: .55; transform: scale(1.1); }
+        .hero-shade { position: absolute; inset: 0; background: radial-gradient(ellipse 50% 70% at 30% 30%, rgba(255,255,255,.10), transparent 70%), linear-gradient(180deg, rgba(14,14,14,.15), #0e0e0e 96%); }
+        .hero-inner { position: relative; display: flex; gap: 44px; align-items: flex-end; }
+        .hero-poster { width: 240px; flex: none; aspect-ratio: 2 / 3; background: #1a1a1a; border: 1px solid rgba(255,255,255,.15); margin-bottom: -110px; box-shadow: 0 40px 80px -30px #000; overflow: hidden; }
+        .hero-poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .kicker { font-size: 13px; color: var(--fg-2); font-weight: 700; }
+        .title { font-size: clamp(44px, 8vw, 104px); line-height: .9; margin-top: 8px; text-wrap: balance; }
+        .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; font-size: 12px; font-weight: 700; }
+        .chips span { padding: 6px 10px; border: 1px solid rgba(255,255,255,.25); }
+
+        .body { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 44px; padding-top: 130px; padding-bottom: 60px; }
+        .facts { display: flex; flex-direction: column; gap: 18px; font-size: 12.5px; line-height: 1.5; }
+        .facts .k { color: var(--muted); font-weight: 700; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; }
+        .facts .v { font-weight: 600; }
+        .alias { display: flex; gap: 8px; align-items: baseline; color: var(--fg-2); }
+        .alias .dot { position: relative; top: -1px; }
+        .watch { margin-top: 8px; font-size: 12px; color: var(--muted); font-weight: 700; text-decoration: none; background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit; text-align: left; }
+        .watch:hover { color: var(--fg); }
+        .synopsis { font-size: 17px; line-height: 1.55; color: var(--fg-2); margin: 0; max-width: 640px; text-wrap: pretty; }
+
+        .sched-head { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 56px; gap: 16px; flex-wrap: wrap; }
+        .label { font-size: 12px; color: var(--muted); font-weight: 700; }
+        .sel-long { font-size: 44px; line-height: 1; margin-top: 4px; }
+        .rows { display: flex; flex-direction: column; margin-top: 24px; border-top: 1px solid var(--line-3); }
+        .row { display: grid; grid-template-columns: 210px minmax(0, 1fr) auto; gap: 20px; align-items: center; padding: 18px 0; border-bottom: 1px solid var(--line-2); }
+        .row .cin { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 800; }
+        .row .cin .dot { width: 9px; height: 9px; }
+        .row .branch { font-size: 12px; color: var(--muted); margin-top: 3px; margin-left: 17px; font-weight: 600; }
+        .row .times { display: flex; flex-wrap: wrap; gap: 6px; }
+        .row .site { font-size: 12px; color: var(--muted); font-weight: 700; white-space: nowrap; text-decoration: none; }
+        .row .site:hover { color: var(--fg); }
+
+        .week { display: grid; grid-template-columns: 150px repeat(7, minmax(0, 1fr)); margin-top: 14px; border-top: 1px solid var(--line-3); font-size: 12px; }
+        .week > div { padding: 10px 0; border-bottom: 1px solid var(--line-2); }
+        .week .h { text-align: center; font-weight: 800; color: var(--muted); }
+        .week .h.on { color: var(--fg); }
+        .week .r { display: flex; align-items: center; gap: 8px; padding: 12px 0; font-weight: 800; }
+        .week .c { padding: 12px 0; text-align: center; font-weight: 600; cursor: pointer; color: #3a3a37; }
+        .week .c.has { color: var(--fg-2); }
+        .week .c.on { background: rgba(255,255,255,.06); }
+        .week .c.on.has { color: var(--fg); }
+
+        .others { display: flex; gap: 18px; margin-top: 14px; overflow-x: auto; padding-bottom: 6px; }
+        .other { width: 130px; flex: none; text-decoration: none; opacity: .8; transition: opacity .2s, transform .2s; }
+        .other:hover { opacity: 1; transform: translateY(-4px); }
+        .other .p { aspect-ratio: 2 / 3; background: #1a1a1a; overflow: hidden; }
+        .other .p img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .other .n { font-size: 20px; letter-spacing: .03em; margin-top: 8px; line-height: 1; }
+
+        @media (max-width: 760px) {
+            .hero { min-height: 0; padding-top: 24px; }
+            .hero-inner { flex-direction: column; align-items: flex-start; gap: 20px; }
+            .hero-poster { width: 150px; margin-bottom: 0; }
+            .body { grid-template-columns: 1fr; gap: 32px; padding-top: 32px; }
+            .row { grid-template-columns: 1fr; gap: 10px; }
+            .sel-long { font-size: 32px; }
+            .week { grid-template-columns: 90px repeat(7, minmax(0, 1fr)); font-size: 10px; }
+        }
+{% endblock %}
+
+{% block topbar %}
+    <a class="back" href="{{ home_href }}">← All films</a>
+    <a class="brand" href="{{ home_href }}">UB Cinema Guide</a>
+    <div class="topbar-side">{% if not static_mode %}<a href="/watchlist">Watchlist</a>{% endif %}</div>
+{% endblock %}
+
+{% block content %}
+    <div class="hero">
+        <div class="hero-bg" {% if film.poster %}style="background-image:url('{{ film.poster }}')"{% endif %}></div>
+        <div class="hero-shade"></div>
+        <div class="wrap hero-inner">
+            <div class="hero-poster">{% if film.poster %}<img src="{{ film.poster }}" alt="">{% endif %}</div>
+            <div class="fadeup" style="min-width:0;padding-bottom:10px">
+                <div class="kicker">Now showing · {{ film.cinemas | length }} cinema{{ 's' if film.cinemas | length != 1 }}</div>
+                <div class="title oswald">{{ film.title }}</div>
+                <div class="chips" id="chips"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="wrap body">
+        <div class="facts">
+            {% if film.genres %}<div><div class="k">Genre</div><div class="v">{{ film.genres | join(', ') }}</div></div>{% endif %}
+            {% if film.duration_minutes or film.duration %}<div><div class="k">Running time</div><div class="v" id="duration">{{ film.duration }}</div></div>{% endif %}
+            {% if film.rating %}<div><div class="k">Rating</div><div class="v">{{ film.rating }}</div></div>{% endif %}
+            {% if film.start_date %}<div><div class="k">In cinemas from</div><div class="v">{{ film.start_date }}</div></div>{% endif %}
+            <div><div class="k">Listed as</div>
+                <div style="display:flex;flex-direction:column;gap:4px;margin-top:4px">
+                    {% for cinema in film.cinemas %}<div class="alias"><span class="dot" data-cinema="{{ cinema.name }}"></span><span>{{ film.titles[cinema.name] or film.title }} — {{ cinema.name }}</span></div>{% endfor %}
+                </div></div>
+            {% if not static_mode %}<button class="watch" onclick="addToWatchlist()">+ Add to watchlist</button>{% endif %}
+        </div>
+
+        <div style="min-width:0">
+            {% if film.description %}<p class="synopsis">{{ film.description }}</p>{% endif %}
+
+            <div class="sched-head">
+                <div><div class="label">Screenings · <span id="selRel"></span></div><div class="sel-long oswald" id="selLong"></div></div>
+                <div class="label" id="dayCount"></div>
+            </div>
+            <div class="daystrip large" id="days" style="justify-content:flex-start;margin-top:20px"></div>
+            <div class="rows" id="rows"></div>
+            <div class="legend" style="margin-top:14px"><span><i class="direct"></i>opens the seat picker for that exact show</span><span><i></i>opens the film page (Tengis books via a pop-up)</span></div>
+
+            <div class="label" style="margin-top:56px">Week at a glance</div>
+            <div class="week" id="week"></div>
+
+            <div class="label" style="margin-top:56px">Also showing <span id="alsoRel"></span></div>
+            <div class="others" id="others"></div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const FILM = {{ film | tojson }};
+const DATA = {{ movies | tojson }};
+const FILM_HREF = {{ film_href | tojson }};
+const filmHref = id => FILM_HREF.replace('{id}', encodeURIComponent(id));
+const state = { sel: TODAY };
+try { const q = new URLSearchParams(location.search); if (q.get('date')) state.sel = q.get('date'); } catch (e) {}
+if (!FILM.dates.includes(state.sel) && FILM.dates.length && dayOff(FILM.dates[0]) > 0) state.sel = FILM.dates[0];
+
+document.querySelectorAll('.alias .dot').forEach(el => el.style.background = CIN[el.dataset.cinema] || '#fff');
+const dur = document.getElementById('duration');
+if (dur && FILM.duration_minutes) dur.textContent = `${fmtDuration(FILM.duration_minutes)} · ${FILM.duration_minutes} min`;
+document.getElementById('chips').innerHTML = [...formatsOf(FILM), FILM.rating, FILM.duration_minutes ? `${FILM.duration_minutes} min` : ''].filter(Boolean).map(c => `<span>${esc(c)}</span>`).join('');
+
+const cinemasOn = date => [...new Set(FILM.cinemas.filter(c => c.showtimes.some(s => s.date === date)).map(c => c.name))];
+
+function render() {
+    dayStrip(document.getElementById('days'), state.sel, id => { state.sel = id; render(); }, id => dayOff(id) < 0 ? [] : cinemasOn(id).map(n => CIN[n]));
+    document.getElementById('selRel').textContent = relDay(state.sel).toLowerCase();
+    document.getElementById('alsoRel').textContent = relDay(state.sel).toLowerCase();
+    document.getElementById('selLong').textContent = longDay(state.sel);
+
+    const groups = groupsFor(FILM, state.sel, null);
+    const n = groups.reduce((k, g) => k + g.times.length, 0);
+    document.getElementById('dayCount').textContent = `${n} show${n === 1 ? '' : 's'} · ${cinemasOn(state.sel).length} cinema${cinemasOn(state.sel).length === 1 ? '' : 's'}`;
+    document.getElementById('rows').innerHTML = groups.length ? groups.map(g => `
+        <div class="row">
+            <div><div class="cin"><span class="dot" style="background:${g.color}"></span>${esc(g.cinema)}</div><div class="branch">${esc(g.branch)}</div></div>
+            <div class="times">${g.times.map(s => timeChip(s, [s.hall, s.format].filter(Boolean).join(' · ') || (s.end_time ? `ends ${s.end_time}` : ''))).join('')}</div>
+            <a class="site" href="${esc(g.url)}" target="_blank" rel="noopener">${SITE[g.cinema] || g.cinema} ↗</a>
+        </div>`).join('') : `<div style="padding:24px 0;color:var(--muted);font-size:13px;font-weight:600;border-bottom:1px solid var(--line-2)">No screenings on this day.</div>`;
+
+    // week at a glance
+    const week = []; for (let i = 0; i < 7; i++) { const d = new Date(TODAY0); d.setDate(TODAY0.getDate() + i); week.push({ id: isoDate(d), label: i === 0 ? 'Today' : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' }) }); }
+    let html = '<div></div>' + week.map(w => `<div class="h ${w.id === state.sel ? 'on' : ''}">${esc(w.label)}</div>`).join('');
+    for (const c of FILM.cinemas) {
+        html += `<div class="r"><span class="dot" style="background:${CIN[c.name]}"></span>${esc(c.name)}</div>`;
+        html += week.map(w => { const k = c.showtimes.filter(s => s.date === w.id).length; return `<div class="c ${k ? 'has' : ''} ${w.id === state.sel ? 'on' : ''}" data-date="${w.id}">${k ? `${k} show${k > 1 ? 's' : ''}` : '—'}</div>`; }).join('');
+    }
+    const weekEl = document.getElementById('week'); weekEl.innerHTML = html;
+    weekEl.querySelectorAll('.c').forEach(el => el.onclick = () => { state.sel = el.dataset.date; render(); });
+
+    // also showing
+    const others = DATA.filter(m => m.id !== FILM.id && m.cinemas.some(c => c.showtimes.some(s => s.date === state.sel))).slice(0, 8);
+    document.getElementById('others').innerHTML = others.length ? others.map(m => `
+        <a class="other" href="${filmHref(m.id)}?date=${state.sel}"><div class="p">${m.poster ? `<img src="${esc(m.poster)}" alt="" loading="lazy">` : ''}</div><div class="n oswald">${esc(m.title)}</div></a>`).join('')
+        : `<div style="color:var(--muted);font-size:13px;font-weight:600">Nothing else listed for this day.</div>`;
+}
+render();
+
+async function addToWatchlist() {
+    try {
+        const r = await fetch('/api/watchlist', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ movie: FILM.title }) });
+        const d = await r.json();
+        showToast(d.status === 'added' ? `Added "${FILM.title}" to your watchlist` : d.status === 'exists' ? 'Already on your watchlist' : (d.error || 'Error'), d.status ? 'success' : 'error');
+    } catch (e) { showToast('Error: ' + e.message, 'error'); }
+}
+</script>
+{% endblock %}

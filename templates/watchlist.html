@@ -1,92 +1,91 @@
 {% extends "base.html" %}
 
-{% block title %}Watchlist - UB Cinema Guide{% endblock %}
+{% block title %}Watchlist · UB Cinema Guide{% endblock %}
+
+{% block style %}
+        .page { padding-top: 56px; padding-bottom: 64px; flex: 1; }
+        .h1 { font-size: clamp(40px, 6vw, 72px); line-height: .95; }
+        .lead { font-size: 13px; color: var(--muted); font-weight: 600; margin-top: 12px; }
+        .form { display: flex; gap: 8px; margin-top: 32px; max-width: 560px; }
+        .form input { flex: 1; background: transparent; border: 0; border-bottom: 1px solid var(--line-3); color: var(--fg); padding: 10px 0; font-size: 14px; font-weight: 600; outline: none; }
+        .form input:focus { border-color: var(--muted); }
+        .form button { background: var(--fg); color: var(--bg); border: 0; padding: 10px 16px; font-size: 12px; font-weight: 800; cursor: pointer; font-family: inherit; }
+        .section { margin-top: 48px; }
+        .list { border-top: 1px solid var(--line-3); margin-top: 14px; }
+        .item { display: flex; align-items: center; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line-2); }
+        .item .name { flex: 1; font-size: 20px; letter-spacing: .03em; text-decoration: none; }
+        .item .sub { font-size: 12px; color: var(--muted); font-weight: 600; }
+        .item button { background: none; border: 1px solid var(--line-3); color: var(--muted); padding: 6px 10px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; }
+        .item button:hover { color: var(--fg); border-color: var(--fg); }
+        .match { border: 1px solid var(--direct); padding: 16px 18px; margin-top: 14px; }
+        .match .tag { font-size: 10px; font-weight: 800; letter-spacing: .1em; color: var(--direct); }
+        .match .t2 { font-size: 28px; margin-top: 6px; letter-spacing: .03em; }
+        .match .where { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 10px; font-size: 12px; font-weight: 600; color: var(--fg-2); }
+        .match .where a { color: var(--muted); text-decoration: none; }
+{% endblock %}
+
+{% block topbar %}
+    <a class="back" style="font-size:12px;color:var(--muted);font-weight:700;text-decoration:none" href="/">← All films</a>
+    <a class="brand" href="/">UB Cinema Guide</a>
+    <div class="topbar-side"></div>
+{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>📋 My Watchlist</h1>
-    <p>Track films you're waiting for. Matches are highlighted here and emailed after each scrape.</p>
-</div>
+<div class="wrap page">
+    <div class="h1 oswald">My Watchlist</div>
+    <div class="lead">Films you're waiting for. Matches show here and are emailed after each scrape.</div>
 
-<form class="watchlist-form" onsubmit="addMovie(event)">
-    <input type="text" id="newMovie" placeholder="Enter a film title to track..." required autocomplete="off">
-    <button type="submit" class="btn btn-primary">➕ Add to Watchlist</button>
-</form>
+    <form class="form" onsubmit="addMovie(event)">
+        <input type="text" id="newMovie" placeholder="Film title to track" required autocomplete="off">
+        <button type="submit">ADD</button>
+    </form>
 
-{% if matches %}
-<div style="margin-bottom: 2rem;">
-    <h2 style="margin-bottom: 1rem;">🎉 Now Playing from Your Watchlist</h2>
-    {% for match in matches %}
-    {% set movie = match.movie %}
-    <div class="match-card">
-        <div class="match-header">
-            <span class="match-badge">NOW PLAYING</span>
-            <span style="color: var(--text-muted); font-size: 0.875rem;">{{ match.similarity }}% match for "{{ match.watchlist_name }}"</span>
-        </div>
-        <h3>{{ movie.title }}</h3>
-        <p style="color: var(--text-muted); margin: 0.5rem 0;">
-            {{ movie.rating or '?' }} • {{ movie.duration or '?' }} • {{ movie.genres | join(', ') }}
-        </p>
-        {% for cinema in movie.cinemas %}
-        <p><strong>📍 {{ cinema.name }}:</strong>
-            {{ cinema.showtimes | map(attribute='branch') | unique | join(', ') or 'no screenings listed' }}
-            <a href="{{ cinema.url }}" target="_blank" class="movie-link" style="margin-left: 0.5rem;">Open ↗</a>
-        </p>
-        {% endfor %}
-    </div>
-    {% endfor %}
-</div>
-{% endif %}
-
-<div>
-    <h2 style="margin-bottom: 1rem;">📋 Your Watchlist ({{ watchlist | length }})</h2>
-    {% if watchlist %}
-    <div class="watchlist-grid" id="watchlistGrid">
-        {% for movie in watchlist %}
-        <div class="watchlist-item" data-movie="{{ movie }}">
-            <span class="movie-name">{{ movie }}</span>
-            <button class="remove-btn" onclick="removeMovie(this.parentNode.dataset.movie)" title="Remove">✕</button>
+    {% if matches %}
+    <div class="section">
+        <div class="label" style="font-size:12px;color:var(--muted);font-weight:700">Now playing from your watchlist</div>
+        {% for match in matches %}{% set movie = match.movie %}
+        <div class="match">
+            <div class="tag">NOW PLAYING · {{ match.similarity }}% MATCH FOR "{{ match.watchlist_name | upper }}"</div>
+            <a class="t2 oswald" style="display:block;text-decoration:none" href="/film/{{ movie.id }}">{{ movie.title }}</a>
+            <div class="where">
+                {% for cinema in movie.cinemas %}<span><span class="dot" style="background:var(--{{ {'Urgoo':'urgoo','Tengis':'tengis','Prime Cineplex':'prime'}.get(cinema.name, 'fg') }});margin-right:6px"></span>{{ cinema.name }}: {{ cinema.showtimes | map(attribute='branch') | unique | join(', ') or 'no screenings listed' }} <a href="{{ cinema.url }}" target="_blank">↗</a></span>{% endfor %}
+            </div>
         </div>
         {% endfor %}
     </div>
-    {% else %}
-    <div class="empty-state">
-        <div class="empty-state-icon">📋</div>
-        <h3>Your watchlist is empty</h3>
-        <p>Add film titles above, or quick-add one that is showing now.</p>
+    {% endif %}
+
+    <div class="section">
+        <div style="font-size:12px;color:var(--muted);font-weight:700">Your watchlist · {{ watchlist | length }}</div>
+        <div class="list">
+            {% for movie in watchlist %}
+            <div class="item" data-movie="{{ movie }}"><span class="name oswald">{{ movie }}</span><button onclick="removeMovie(this.parentNode.dataset.movie)">REMOVE</button></div>
+            {% else %}
+            <div class="item"><span class="sub">Nothing yet. Add a title above or from the list below.</span></div>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% if currently_showing %}
+    <div class="section">
+        <div style="font-size:12px;color:var(--muted);font-weight:700">Quick add from now showing</div>
+        <div class="list">
+            {% for movie in currently_showing %}
+            <div class="item" data-movie="{{ movie.title }}"><a class="name oswald" href="/film/{{ movie.id }}">{{ movie.title }}</a><span class="sub">{{ movie.cinemas | map(attribute='name') | join(' · ') }}</span><button onclick="quickAdd(this.parentNode.dataset.movie)">+ ADD</button></div>
+            {% endfor %}
+        </div>
     </div>
     {% endif %}
 </div>
-
-{% if currently_showing %}
-<div style="margin-top: 2rem;">
-    <h2 style="margin-bottom: 1rem;">🎬 Quick add from now showing</h2>
-    <div class="watchlist-grid">
-        {% for movie in currently_showing %}
-        <div class="watchlist-item" data-movie="{{ movie.title }}">
-            <span class="movie-name">{{ movie.title }}</span>
-            <button class="btn btn-secondary" style="padding: 0.3rem 0.7rem;" onclick="quickAdd(this.parentNode.dataset.movie)">➕</button>
-        </div>
-        {% endfor %}
-    </div>
-</div>
-{% endif %}
 {% endblock %}
 
 {% block extra_js %}
 <script>
 async function post(method, movie) {
-    const response = await fetch("/api/watchlist", {
-        method, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ movie }),
-    });
+    const response = await fetch("/api/watchlist", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ movie }) });
     return response.json();
 }
-async function addMovie(event) {
-    event.preventDefault();
-    const input = document.getElementById("newMovie");
-    await quickAdd(input.value.trim());
-    input.value = "";
-}
+async function addMovie(event) { event.preventDefault(); const input = document.getElementById("newMovie"); await quickAdd(input.value.trim()); input.value = ""; }
 async function quickAdd(movie) {
     if (!movie) return;
     const data = await post("POST", movie);

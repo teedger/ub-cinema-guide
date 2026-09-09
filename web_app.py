@@ -9,7 +9,7 @@ Data comes from output/latest.json, written by scraper_ultimate.py. The
 import os
 from threading import Thread
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, abort, jsonify, render_template, request
 
 import scraper_ultimate
 import watchlist
@@ -46,12 +46,27 @@ def run_scraper():
         scraping_status["is_scraping"] = False
 
 
+def page_context(data):
+    """Variables every page needs; the static build overrides the hrefs."""
+    return {
+        "meta": {"scraped_at": data.get("scraped_at"), "date": data.get("date"), "cinemas": data.get("cinemas", {})},
+        "home_href": "/", "data_href": "/api/movies", "film_href": "/film/{id}", "static_mode": False,
+    }
+
+
 @app.route("/")
 def index():
     data = load_data()
-    return render_template("index.html", movies=data["movies"], meta={
-        "scraped_at": data.get("scraped_at"), "date": data.get("date"), "cinemas": data.get("cinemas", {}),
-    }, scraping_status=scraping_status)
+    return render_template("index.html", movies=data["movies"], scraping_status=scraping_status, **page_context(data))
+
+
+@app.route("/film/<film_id>")
+def film(film_id):
+    data = load_data()
+    movie = next((m for m in data["movies"] if m["id"] == film_id), None)
+    if movie is None:
+        abort(404)
+    return render_template("film.html", film=movie, movies=data["movies"], **page_context(data))
 
 
 @app.route("/api/movies")
@@ -74,10 +89,11 @@ def api_scrape_status():
 
 @app.route("/watchlist")
 def watchlist_page():
-    movies = load_data()["movies"]
+    data = load_data()
+    movies = data["movies"]
     names = watchlist.load_watchlist()
-    return render_template("watchlist.html", watchlist=names,
-                           matches=watchlist.find_matches(movies, names), currently_showing=movies)
+    return render_template("watchlist.html", watchlist=names, matches=watchlist.find_matches(movies, names),
+                           currently_showing=movies, **page_context(data))
 
 
 @app.route("/api/watchlist", methods=["GET", "POST", "DELETE"])
