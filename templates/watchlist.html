@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Watchlist - UB Cinema Guide{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>📋 My Watchlist</h1>
+    <p>Track films you're waiting for. Matches are highlighted here and emailed after each scrape.</p>
+</div>
+
+<form class="watchlist-form" onsubmit="addMovie(event)">
+    <input type="text" id="newMovie" placeholder="Enter a film title to track..." required autocomplete="off">
+    <button type="submit" class="btn btn-primary">➕ Add to Watchlist</button>
+</form>
+
+{% if matches %}
+<div style="margin-bottom: 2rem;">
+    <h2 style="margin-bottom: 1rem;">🎉 Now Playing from Your Watchlist</h2>
+    {% for match in matches %}
+    {% set movie = match.movie %}
+    <div class="match-card">
+        <div class="match-header">
+            <span class="match-badge">NOW PLAYING</span>
+            <span style="color: var(--text-muted); font-size: 0.875rem;">{{ match.similarity }}% match for "{{ match.watchlist_name }}"</span>
+        </div>
+        <h3>{{ movie.title }}</h3>
+        <p style="color: var(--text-muted); margin: 0.5rem 0;">
+            {{ movie.rating or '?' }} • {{ movie.duration or '?' }} • {{ movie.genres | join(', ') }}
+        </p>
+        {% for cinema in movie.cinemas %}
+        <p><strong>📍 {{ cinema.name }}:</strong>
+            {{ cinema.showtimes | map(attribute='branch') | unique | join(', ') or 'no screenings listed' }}
+            <a href="{{ cinema.url }}" target="_blank" class="movie-link" style="margin-left: 0.5rem;">Open ↗</a>
+        </p>
+        {% endfor %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<div>
+    <h2 style="margin-bottom: 1rem;">📋 Your Watchlist ({{ watchlist | length }})</h2>
+    {% if watchlist %}
+    <div class="watchlist-grid" id="watchlistGrid">
+        {% for movie in watchlist %}
+        <div class="watchlist-item" data-movie="{{ movie }}">
+            <span class="movie-name">{{ movie }}</span>
+            <button class="remove-btn" onclick="removeMovie(this.parentNode.dataset.movie)" title="Remove">✕</button>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">📋</div>
+        <h3>Your watchlist is empty</h3>
+        <p>Add film titles above, or quick-add one that is showing now.</p>
+    </div>
+    {% endif %}
+</div>
+
+{% if currently_showing %}
+<div style="margin-top: 2rem;">
+    <h2 style="margin-bottom: 1rem;">🎬 Quick add from now showing</h2>
+    <div class="watchlist-grid">
+        {% for movie in currently_showing %}
+        <div class="watchlist-item" data-movie="{{ movie.title }}">
+            <span class="movie-name">{{ movie.title }}</span>
+            <button class="btn btn-secondary" style="padding: 0.3rem 0.7rem;" onclick="quickAdd(this.parentNode.dataset.movie)">➕</button>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function post(method, movie) {
+    const response = await fetch("/api/watchlist", {
+        method, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ movie }),
+    });
+    return response.json();
+}
+async function addMovie(event) {
+    event.preventDefault();
+    const input = document.getElementById("newMovie");
+    await quickAdd(input.value.trim());
+    input.value = "";
+}
+async function quickAdd(movie) {
+    if (!movie) return;
+    const data = await post("POST", movie);
+    if (data.status === "added") { showToast(`Added "${movie}"`); setTimeout(() => location.reload(), 600); }
+    else if (data.status === "exists") showToast("Already on your watchlist", "error");
+    else showToast(data.error || "Error", "error");
+}
+async function removeMovie(movie) {
+    const data = await post("DELETE", movie);
+    if (data.status === "removed") { showToast(`Removed "${movie}"`); setTimeout(() => location.reload(), 600); }
+    else showToast(data.error || "Error", "error");
+}
+</script>
+{% endblock %}

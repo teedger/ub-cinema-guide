@@ -1,0 +1,67 @@
+name: Scrape cinemas and publish
+
+on:
+  schedule:
+    # 09:00 and 15:00 Ulaanbaatar time (UTC+8)
+    - cron: "0 1 * * *"
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never run two deployments at once; let a running one finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TZ: Asia/Ulaanbaatar
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Scrape all cinemas
+        # Ubuntu runners ship with Google Chrome; Selenium Manager fetches the matching driver.
+        run: python scraper_ultimate.py
+
+      - name: Build the static site
+        run: python build_static.py
+
+      - name: Keep the raw data for debugging
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scrape-output
+          path: output/
+          retention-days: 7
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: scrape
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

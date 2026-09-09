@@ -1,42 +1,42 @@
 #!/usr/bin/env python3
+"""Urgoo Cinema scraper.
+
+urgoo.mn redirects to new.urgoo.mn (a Next.js app). Movie links must be built on
+new.urgoo.mn: urgoo.mn/movies/... redirects to the old www server and 404s.
+
+Flow: movie_extract() reads the "Яг одоо дэлгэцнээ" (now showing) cards on the
+homepage, movie_info() reads each movie page for details, and scrape_schedule()
+walks the /schedule page date by date to collect every screening with its direct
+seat-selection link. scrape() runs all three and returns common movie records.
+"""
 
 import datetime
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from fuzzywuzzy import fuzz
-import smtplib
-from email.utils import formataddr
-import os
-import csv
 import json
-import ast
 import re
+import sys
+import time
 
-today = datetime.date.today().strftime("%Y%m%d")
+from bs4 import BeautifulSoup
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 
-currently_showing_list = []
+from common import clean_text, date_from_month_day, make_driver, new_movie, showtime
 
-# urgoo.mn now redirects to new.urgoo.mn (Next.js). Movie links must be built on
-# new.urgoo.mn: urgoo.mn/movies/... redirects to the old www server and 404s.
-url = 'https://new.urgoo.mn/'
+CINEMA = "Urgoo"
+BASE_URL = "https://new.urgoo.mn"
 # Homepage sections: "now-showing" (Яг одоо дэлгэцнээ) and "coming-soon" (Тун удахгүй)
 SECTION_ID = "now-showing"
-file_name = f'/Users/user/Documents/Python/2025/Day_12_Urgoo_Cinema/output/currently_showing_list_{today}.csv'
-
-chrome_options = Options()
-chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                            "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36")
-chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-chrome_options.add_argument("--headless=new")
-chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-chrome_options.add_experimental_option("useAutomationExtension", False)
+MAX_DAYS_AHEAD = 7
 
 # Ratings seen on the site: G, PG, PG13, R, R16 ... (also accept R18, NC-17, 16+)
 RATING_PATTERN = re.compile(r'^(G|PG|PG-?13|R(-?\d{2})?|NC-?17|\d{1,2}\+)$', re.IGNORECASE)
+TIME_PATTERN = re.compile(r"^\d{1,2}:\d{2}$")
+
+
+def absolute(href):
+    return href if href.startswith("http") else BASE_URL + href
 
 
 def close_floating_ad(driver, wait_seconds=3):
@@ -48,237 +48,224 @@ def close_floating_ad(driver, wait_seconds=3):
         presentation.find_element(By.TAG_NAME, "svg").click()
         print("Clicked X on a floating ad!")
     except (TimeoutException, NoSuchElementException):
-        pass  # no ad, or no close icon inside it — fine either way
+        pass
 
 
-def movie_extract():
-    driver = webdriver.Chrome(options=chrome_options)
-    driver.get(url)
-    movie_list = []
+def movie_extract(driver=None):
+    """Return [{source_id, title, url, poster}] for the now-showing cards."""
+    own_driver = driver is None
+    driver = driver or make_driver()
+    movies = []
     try:
+        driver.get(BASE_URL + "/")
         close_floating_ad(driver)
-
-        section = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.ID, SECTION_ID))
-        )
-        cards = section.find_elements(By.CSS_SELECTOR, "a[href*='/movies/']")
-        for card in cards:
-            movie_link = card.get_attribute("href")
-            # Each card has an aria-hidden blurred placeholder <img> first; the real
+        WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, SECTION_ID)))
+        section = BeautifulSoup(driver.page_source, "html.parser").find(id=SECTION_ID)
+        for card in section.select("a[href*='/movies/']"):
+            match = re.search(r"/movies/([^/?#]+)", card["href"])
+            # Each card has a blurred aria-hidden placeholder <img> first; the real
             # poster is the first Next.js fill image and carries the title as alt.
-            posters = card.find_elements(By.CSS_SELECTOR, "img[data-nimg='fill']")
-            if not posters:
-                print(f"⚠️ No poster image found for {movie_link}, skipping")
+            poster = card.select_one("img[data-nimg='fill']")
+            if not match or poster is None:
                 continue
-            img_link = posters[0].get_attribute("src")
-            movie_name = (posters[0].get_attribute("alt") or "").strip()
-            movie_list.append({
-                "movie_name": movie_name,
-                "movie_link": movie_link,
-                "img_link": img_link,
+            movies.append({
+                "source_id": match.group(1),
+                "title": clean_text(poster.get("alt", "")),
+                "url": absolute(card["href"]),
+                "poster": poster.get("src", ""),
             })
+    except TimeoutException:
+        print(f"❌ Urgoo: the '{SECTION_ID}' section never appeared")
+    finally:
+        if own_driver:
+            driver.quit()
+    return movies
 
-    except (NoSuchElementException, TimeoutException) as error:
-        print(f"❌ Could not read the '{SECTION_ID}' section: {error}")
-    driver.quit()
-    return movie_list
+
+def parse_movie_page(html, link):
+    soup = BeautifulSoup(html, "html.parser")
+    # Some pages (pre-orders) have no <h1>; fall back to the og:title / <title>.
+    heading = next((h.get_text(strip=True) for h in soup.find_all("h1") if h.get_text(strip=True)), "")
+    if not heading:
+        og_title = soup.find("meta", property="og:title")
+        heading = clean_text(og_title["content"] if og_title and og_title.get("content")
+                             else (soup.title.string if soup.title and soup.title.string else ""))
+    info_box = soup.select_one("div[class~='bg-foreground/5'][class~='rounded-lg']")
+    description = ""
+    if info_box is not None:
+        paragraph = info_box.find("p")
+        description = paragraph.get_text(" ", strip=True) if paragraph else ""
+
+    details = {"genres": [], "duration": "", "rating": "", "start_date": ""}
+    # Info rows: Хугацаа / Өргөөгийн дэлгэцнээ / IMDb үнэлгээ / <rating> / Найруулагч / Төрөл
+    for row in soup.select("[data-slot='info-row']"):
+        key_el = row.select_one("[data-slot='info-row-title']")
+        val_el = row.select_one("[data-slot='info-row-description']")
+        key = key_el.get_text(strip=True) if key_el else ""
+        value = val_el.get_text(" ", strip=True) if val_el else ""
+        if key == "Төрөл":
+            details["genres"] = [g.strip() for g in value.split(",") if g.strip()]
+        elif key == "Хугацаа":
+            details["duration"] = value
+        elif key == "Өргөөгийн дэлгэцнээ":
+            details["start_date"] = value
+        elif RATING_PATTERN.match(key):
+            details["rating"] = key
+
+    poster = link.get("poster", "")
+    if not poster:
+        og = soup.find("meta", property="og:image")
+        poster = og["content"] if og and og.get("content") else ""
+    return new_movie(CINEMA, link["source_id"], heading or link["title"], link["url"],
+                     poster=poster, description=description, **details)
 
 
-def movie_info(links):
-    driver = webdriver.Chrome(options=chrome_options)
-    for movie in links:
-        movie_link = movie.get("movie_link")
-        try:
-            driver.get(movie_link)
-            close_floating_ad(driver)
-
+def movie_info(links, driver=None):
+    """Visit each movie page and return common movie records (without showtimes)."""
+    own_driver = driver is None
+    driver = driver or make_driver()
+    movies = []
+    try:
+        for link in links:
             try:
-                # The info box is the most stable anchor on the new detail page.
+                driver.get(link["url"])
+                close_floating_ad(driver)
                 WebDriverWait(driver, 10).until(
                     EC.presence_of_element_located((By.CSS_SELECTOR, "[data-slot='info-row']"))
                 )
-
-                # Title: prefer the page <h1>, fall back to the card's alt text
-                headings = driver.find_elements(By.TAG_NAME, "h1")
-                movie_name = next((h.text.strip() for h in headings if h.text.strip()), None) \
-                    or movie.get("movie_name")
-
-                # Description: the <p> right after the info rows, inside the info box
-                info_box = driver.find_element(By.CSS_SELECTOR, r"div.bg-foreground\/5.rounded-lg")
-                paragraphs = info_box.find_elements(By.TAG_NAME, "p")
-                movie_description = paragraphs[0].text.strip() if paragraphs else "N/A"
-
-                # Branches showing the movie on the selected (today's) date
-                branches = {"Urgoo": []}
-                for branch in driver.find_elements(By.CSS_SELECTOR, "div.divide-y > div"):
-                    names = branch.find_elements(By.CSS_SELECTOR, "p.text-foreground")
-                    if names and names[0].text.strip():
-                        branches["Urgoo"].append(names[0].text.strip())
-                # Fallback: the branch dropdown lists every branch screening the film
-                if not branches["Urgoo"]:
-                    for option in driver.find_elements(By.CSS_SELECTOR, "select option"):
-                        if option.get_attribute("value") != "all" and option.text.strip():
-                            branches["Urgoo"].append(option.text.strip())
-                theater_names = [branches]
-
-                movie_dict = {
-                    "movie_name": movie_name,
-                    "movie_description": movie_description,
-                    "movie_genre": None,
-                    "movie_duration": None,
-                    "movie_rating": None,
-                    "movie_start_date": None,
-                    "screens": theater_names,
-                    "theater": "Urgoo",
-                    "movie_link": movie_link,
-                    "img_link": movie.get("img_link"),
-                }
-
-                # Info rows: Хугацаа / Өргөөгийн дэлгэцнээ / IMDb үнэлгээ / <rating> / Найруулагч / Төрөл
-                for row in driver.find_elements(By.CSS_SELECTOR, "[data-slot='info-row']"):
-                    try:
-                        key = row.find_element(By.CSS_SELECTOR, "[data-slot='info-row-title']").text.strip()
-                        value = row.find_element(By.CSS_SELECTOR, "[data-slot='info-row-description']").text.strip()
-                        if key == "Төрөл":
-                            movie_dict["movie_genre"] = value
-                        elif key == "Хугацаа":
-                            movie_dict["movie_duration"] = value
-                        elif RATING_PATTERN.match(key):
-                            movie_dict["movie_rating"] = key
-                        elif key == "Өргөөгийн дэлгэцнээ":
-                            movie_dict["movie_start_date"] = value
-                    except NoSuchElementException as e:
-                        print(f"⚠️ Skipped a malformed info row in {movie_link}: {e}")
-
-                currently_showing_list.append(movie_dict)
-
+                movies.append(parse_movie_page(driver.page_source, link))
+                print(f"Urgoo: scraped {link['url']}")
             except TimeoutException:
-                print(f"❌ Info box never appeared on {movie_link}; skipping.")
-                continue
-            except NoSuchElementException as error:
-                print(f"❌ Missing expected element in {movie_link}: {error}")
-            except Exception as e:
-                print(f"⚠️ General block error in {movie_link}: {e}")
-
-            print(f"Finished scraping {movie_link}")
-
-        except Exception as e:
-            print(f"❌ Error processing {movie_link}: {e}")
-
-    driver.quit()
-
-    # Check and combine movie names in csv.
-    if os.path.exists(file_name):
-        # 1. Read existing rows into memory first
-        with open(file_name, mode="r", newline='', encoding="utf-8") as movie_file:
-            reader = csv.DictReader(movie_file)
-            fieldnames = reader.fieldnames
-            existing_rows = list(reader)
-
-        # 2. Modify in memory
-        def safe_parse_list(value):
-            if not value:
-                return []
-            try:
-                return json.loads(value)
-            except json.JSONDecodeError:
-                try:
-                    return ast.literal_eval(value)
-                except (ValueError, SyntaxError):
-                    return [value]
-
-        for row in existing_rows:
-            movie = row["movie_name"]
-            screens = safe_parse_list(row["screens"]) if row["screens"] else []
-            theaters = safe_parse_list(row["theater"]) if row["theater"] else []
-            movie_url = safe_parse_list(row["movie_link"]) if row["movie_link"] else []
-
-            for film in list(currently_showing_list):
-                similarity = fuzz.token_set_ratio(movie.lower(), film["movie_name"].lower())
-                if similarity > 90:
-                    screens.extend(film["screens"])
-                    theaters.append(film["theater"])  # or .extend() if film["theater"] is itself a list
-                    movie_url.append(film["movie_link"])
-                    currently_showing_list.remove(film)
-
-            row["screens"] = json.dumps(screens, ensure_ascii=False)
-            row["theater"] = json.dumps(theaters, ensure_ascii=False)
-            row["movie_link"] = json.dumps(movie_url, ensure_ascii=False)
-
-        # 3. Write back
-        with open(file_name, mode="w", newline='', encoding="utf-8") as movie_file:
-            writer = csv.DictWriter(movie_file, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(existing_rows)
-
-    # Save to CSV
-    if currently_showing_list:
-        mode = "a" if os.path.exists(file_name) else "w"
-        write_header = mode == "w"
-        fieldnames = currently_showing_list[0].keys()
-
-        with open(file_name, mode=mode, newline='', encoding='utf-8') as file:
-            writer = csv.DictWriter(file, fieldnames=fieldnames)
-            if write_header:
-                writer.writeheader()
-            writer.writerows(currently_showing_list)
-
-        print(f"✅ Successfully finished saving to {file_name}. Total {len(currently_showing_list)} movies are found")
-
-    return currently_showing_list
+                print(f"❌ Urgoo: info box never appeared on {link['url']}; skipping")
+            except Exception as e:  # keep going with the other movies
+                print(f"⚠️ Urgoo: error on {link['url']}: {e}")
+    finally:
+        if own_driver:
+            driver.quit()
+    return movies
 
 
-def movie_tracker(total_list):
-    with open("/Users/user/Documents/Python/2025/Day_12_Urgoo_Cinema/files/my_movies.txt", mode="r", encoding="utf-8") as movie_file:
-        my_movies = movie_file.readlines()
-    matched_movie_text = []
-    matched_movies = set()
-    number = 1
-    for movie in my_movies:
-        for film in total_list:
-            similarity = fuzz.token_set_ratio(movie.lower(), film["movie_name"].lower())
-            if similarity > 80:
-                text = (
-                    f"{number}. {film['movie_name'].upper()} ({film['movie_rating']}, {film['movie_duration']}) "
-                    f"in Urgoo! "
-                    f"Starts {film['movie_start_date']}. Available in {film['screens']}")
-                matched_movie_text.append(text)
-                matched_movies.add(movie)
-                number += 1
+def _date_buttons(driver):
+    return [b for b in driver.find_elements(By.CSS_SELECTOR, "button")
+            if re.search(r"\d{1,2}\s*сар\s*\d{1,2}", b.text)]
 
-    if matched_movies:
-        # If there are matched movies, delete them from my_movies.txt by overwriting.
-        with open("files/my_movies.txt", "w", encoding="utf-8") as file:
-            for movie in my_movies:
-                if movie not in list(matched_movies):
-                    file.write(movie)
 
-        # Combine the texts in one text with line breaks
-        combined_text = "\n\n".join(matched_movie_text)
+def _session_hrefs(driver):
+    return driver.execute_script(
+        "return Array.from(document.querySelectorAll(\"a[href*='/sessions/']\")).map(a => a.getAttribute('href'))")
 
-        # Send the combined text to email
-        with smtplib.SMTP("smtp.gmail.com", port=587) as connection:
-            my_email = os.getenv("MY_EMAIL")
-            password = os.getenv("MY_PASSWORD")
-            sender_name = "🔔Notifier"
-            formatted_from = formataddr((sender_name, my_email))
-            connection.starttls()
-            connection.login(user=my_email, password=password)
-            subject = "Subject: New Arrival(s) in Urgoo\n\n"
-            message = subject + combined_text
-            connection.sendmail(
-                from_addr=formatted_from,
-                to_addrs="chster21@gmail.com",
-                msg=message.encode("utf-8")
-            )
-            print(f"Email has been sent successfully.")
+
+def _wait_for_new_sessions(driver, before, timeout=8):
+    """After a date click, wait until the session list changed and then settled."""
+    end = time.time() + timeout
+    current = before
+    while time.time() < end:
+        current = _session_hrefs(driver)
+        if current != before:
+            break
+        time.sleep(0.3)
     else:
-        print("There are no matched movies screening in theaters today.")
+        print("⚠️ Urgoo: schedule did not change after clicking a date; using what is shown")
+    # The list can render empty first and fill in a moment later.
+    for _ in range(10):
+        time.sleep(0.4)
+        again = _session_hrefs(driver)
+        if again == current:
+            break
+        current = again
+
+
+def parse_schedule_page(html, date):
+    """Return {movie_id: [showtime, ...]} for the currently selected date."""
+    soup = BeautifulSoup(html, "html.parser")
+    root = soup.find("main") or soup
+    sessions = {}
+    for row in root.select("div[class~='divide-y'] > div"):
+        poster_link = row.select_one("a[href*='/movies/']")
+        match = re.search(r"/movies/([^/?#]+)", poster_link["href"]) if poster_link else None
+        if not match:
+            continue
+        movie_id = match.group(1)
+        for block in row.select("div[class~='space-y-3']"):
+            name_el = block.find("p")
+            branch = name_el.get_text(strip=True) if name_el else ""
+            for a in block.select("a[href*='/sessions/']"):
+                # A card shows [hall, start, end]; some cards omit the hall label.
+                spans = [s.get_text(strip=True) for s in a.find_all("span")]
+                times = [t for t in spans if TIME_PATTERN.match(t)]
+                labels = [t for t in spans if t and not TIME_PATTERN.match(t)]
+                if not times:
+                    continue
+                sessions.setdefault(movie_id, []).append(showtime(
+                    date, branch, times[0], hall=labels[0] if labels else "",
+                    end_time=times[1] if len(times) > 1 else "",
+                    url=absolute(a["href"]),
+                ))
+    return sessions
+
+
+def scrape_schedule(driver=None, max_days=MAX_DAYS_AHEAD):
+    """Walk the /schedule page's date buttons and collect every screening."""
+    own_driver = driver is None
+    driver = driver or make_driver()
+    today = datetime.date.today()
+    sessions = {}
+    try:
+        driver.get(BASE_URL + "/schedule")
+        close_floating_ad(driver)
+        WebDriverWait(driver, 15).until(lambda d: _date_buttons(d))
+        for index in range(len(_date_buttons(driver))):
+            buttons = _date_buttons(driver)  # re-find: the DOM re-renders after each click
+            if index >= len(buttons):
+                break
+            button = buttons[index]
+            match = re.search(r"(\d{1,2})\s*сар\s*(\d{1,2})", button.text)
+            date = date_from_month_day(int(match.group(1)), int(match.group(2)), today)
+            if date < today or (date - today).days > max_days:
+                continue
+            if "border-brand-blue" not in (button.get_attribute("class") or ""):
+                before = _session_hrefs(driver)
+                driver.execute_script("arguments[0].click()", button)
+                _wait_for_new_sessions(driver, before)
+            day = parse_schedule_page(driver.page_source, date)
+            print(f"Urgoo: {date} -> {sum(len(v) for v in day.values())} screenings")
+            for movie_id, shows in day.items():
+                sessions.setdefault(movie_id, []).extend(shows)
+    except TimeoutException:
+        print("❌ Urgoo: schedule page never showed its date buttons")
+    finally:
+        if own_driver:
+            driver.quit()
+    return sessions
+
+
+def scrape():
+    """Full Urgoo run: now-showing movies with details and all screenings."""
+    driver = make_driver()
+    try:
+        links = movie_extract(driver)
+        print(f"Urgoo: {len(links)} movies now showing")
+        movies = movie_info(links, driver)
+        sessions = scrape_schedule(driver)
+        # Films that have screenings this week but are not in the now-showing
+        # grid (pre-orders / previews) still deserve an entry.
+        known = {link["source_id"] for link in links}
+        extra = [{"source_id": movie_id, "title": "", "url": f"{BASE_URL}/movies/{movie_id}", "poster": ""}
+                 for movie_id in sessions if movie_id not in known]
+        if extra:
+            print(f"Urgoo: {len(extra)} more films found in the schedule")
+            movies += movie_info(extra, driver)
+    finally:
+        driver.quit()
+    for movie in movies:
+        movie["showtimes"] = sessions.get(movie["source_id"], [])
+    return movies
+
 
 if __name__ == "__main__":
-    movie_links = movie_extract()
-    print(movie_links)
-    movie_info(movie_links)
-    # movie_tracker(currently_showing_list)
-
- 
+    result = scrape()
+    for m in result:
+        print(f"- {m['title']} | {m['rating']} | {m['duration']} | {len(m['showtimes'])} screenings")
+    if len(sys.argv) > 1:
+        with open(sys.argv[1], "w", encoding="utf-8") as f:
+            json.dump(result, f, ensure_ascii=False, indent=2)
