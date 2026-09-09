@@ -2,12 +2,10 @@ name: Scrape cinemas and publish
 
 on:
   schedule:
-    # 09:00 and 15:00 Ulaanbaatar time (UTC+8)
+    # 09:00 Ulaanbaatar time (UTC+8), once a day
     - cron: "0 1 * * *"
-    - cron: "0 7 * * *"
+  # Manual run from the Actions tab (use after pushing code changes)
   workflow_dispatch:
-  push:
-    branches: [main]
 
 permissions:
   contents: read

@@ -55,7 +55,7 @@ The website's **Refresh Data** button runs the same pipeline in the background.
 ## Free hosting on GitHub Pages
 
 No server, database or login is needed: `.github/workflows/scrape.yml` scrapes the
-cinemas on GitHub's runners twice a day (09:00 and 15:00 Ulaanbaatar time),
+cinemas on GitHub's runners once a day at 09:00 Ulaanbaatar time,
 builds a static page with `build_static.py`, and deploys it to GitHub Pages.
 Scraped data is uploaded as a deployment artifact and is never committed, so the
 repository stays free of listings, the watchlist and anything personal
@@ -66,7 +66,7 @@ One-time setup:
 1. Push the repository to GitHub (a public repo gets unlimited Actions minutes).
 2. In the repo go to **Settings → Pages** and set **Source** to **GitHub Actions**.
 3. Open the **Actions** tab, pick "Scrape cinemas and publish" and press
-   **Run workflow**. Every push to `main` also triggers a run.
+   **Run workflow**. Pushing code does not trigger a run; use this button to redeploy after a change.
 4. The site appears at `https://<user>.github.io/<repo>/` after the run (about 5 minutes).
 
 If a cinema blocks the runner's IP its badge shows a warning and the other cinemas
