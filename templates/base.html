@@ -175,7 +175,8 @@
             container.appendChild(b);
         }
         const selEl = container.querySelector('.day.sel');
-        if (selEl && container.scrollWidth > container.clientWidth) selEl.scrollIntoView({ inline: 'center', block: 'nearest' });
+        // Centre the selected day horizontally without scrolling the page itself.
+        if (selEl && container.scrollWidth > container.clientWidth) container.scrollLeft = selEl.offsetLeft - (container.clientWidth - selEl.offsetWidth) / 2;
     }
 </script>
 {% block extra_js %}{% endblock %}
