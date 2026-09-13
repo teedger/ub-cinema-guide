@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
-{% block title %}UB Cinema Guide{% endblock %}
+{% block title %}UB Cinema Guide · Ulaanbaatar cinema showtimes{% endblock %}
+{% block description %}Cinema showtimes in Ulaanbaatar for {{ meta.date }}: {{ movies | length }} films at Urgoo, Tengis and Prime Cineplex in one daily guide.{% endblock %}
 
 {% block style %}
         .hero { position: relative; overflow: hidden; }
@@ -58,6 +59,13 @@
 {% endblock %}
 
 {% block content %}
+    <h1 class="sr-only">Cinema showtimes in Ulaanbaatar: Urgoo, Tengis and Prime Cineplex</h1>
+    <noscript>
+        <div class="wrap" style="padding-top:24px">
+            <p>Films now showing ({{ meta.date }}):</p>
+            <ul>{% for m in movies %}<li><a href="{{ film_href.replace('{id}', m.id) }}">{{ m.title }}</a>{% if m.genres %} · {{ m.genres | join(', ') }}{% endif %} · {{ m.cinemas | map(attribute='name') | join(', ') }}</li>{% endfor %}</ul>
+        </div>
+    </noscript>
     <div class="hero" id="hero">
         <div class="hero-bg" id="heroBg"></div>
         <div class="hero-shade"></div>
@@ -100,7 +108,7 @@ function render(scrollToHero = false) {
             <div class="group-head"><span class="dot" style="background:${g.color}"></span>${esc(g.cinema)} <span class="branch">${esc(g.branch)}</span></div>
             <div class="group-times">${g.times.map(s => timeChip(s)).join('')}</div></div>`).join('');
         heroGrid.innerHTML = `
-            <a class="hero-poster" href="${filmHref(m.id)}">${m.poster ? `<img src="${esc(m.poster)}" alt="">` : ''}</a>
+            <a class="hero-poster" href="${filmHref(m.id)}">${m.poster ? `<img src="${esc(m.poster)}" alt="${esc(m.title)} poster">` : ''}</a>
             <div class="fadeup" style="min-width:0;padding-bottom:6px">
                 <div class="hero-kicker">${esc(relDay(state.sel))} · ${esc(longDay(state.sel))}</div>
                 <a class="hero-title oswald" href="${filmHref(m.id)}">${esc(m.title)}</a>
@@ -125,7 +133,7 @@ function render(scrollToHero = false) {
     // grid
     document.getElementById('grid').innerHTML = visible.length ? visible.map(({ m, groups }) => `
         <div class="card ${m.id === state.spot ? 'sel' : ''}" data-id="${esc(m.id)}">
-            <div class="poster">${m.poster ? `<img src="${esc(m.poster)}" alt="" loading="lazy">` : ''}
+            <div class="poster">${m.poster ? `<img src="${esc(m.poster)}" alt="${esc(m.title)} poster" loading="lazy">` : ''}
                 <div class="dots">${[...new Set(groups.map(g => g.color))].map(c => `<span style="background:${c}"></span>`).join('')}</div></div>
             <div class="title oswald">${esc(m.title)}</div>
             <div class="meta">${esc(metaLine(m))}</div>

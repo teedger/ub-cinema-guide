@@ -12,6 +12,7 @@ from threading import Thread
 from flask import Flask, abort, jsonify, render_template, request
 
 import scraper_ultimate
+import seo
 import watchlist
 
 app = Flask(__name__)
@@ -51,13 +52,15 @@ def page_context(data):
     return {
         "meta": {"scraped_at": data.get("scraped_at"), "date": data.get("date"), "cinemas": data.get("cinemas", {})},
         "home_href": "/", "data_href": "/api/movies", "film_href": "/film/{id}", "static_mode": False,
+        "site_url": seo.SITE_URL,
     }
 
 
 @app.route("/")
 def index():
     data = load_data()
-    return render_template("index.html", movies=data["movies"], scraping_status=scraping_status, **page_context(data))
+    return render_template("index.html", movies=data["movies"], scraping_status=scraping_status,
+                           jsonld=seo.home_jsonld(data["movies"]), **page_context(data))
 
 
 @app.route("/film/<film_id>")
@@ -66,7 +69,8 @@ def film(film_id):
     movie = next((m for m in data["movies"] if m["id"] == film_id), None)
     if movie is None:
         abort(404)
-    return render_template("film.html", film=movie, movies=data["movies"], **page_context(data))
+    return render_template("film.html", film=movie, movies=data["movies"],
+                           jsonld=seo.movie_jsonld(movie, seo.film_url(film_id), today=data.get("date")), **page_context(data))
 
 
 @app.route("/api/movies")

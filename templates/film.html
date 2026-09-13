@@ -1,12 +1,9 @@
 {% extends "base.html" %}
 
-{% block title %}{{ film.title }} · UB Cinema Guide{% endblock %}
-
-{% block head %}
-    <meta property="og:title" content="{{ film.title }} · UB Cinema Guide">
-    <meta property="og:description" content="{{ film.genres | join(', ') }}{% if film.duration_minutes %} · {{ film.duration_minutes }} min{% endif %}{% if film.rating %} · {{ film.rating }}{% endif %} · showing at {{ film.cinemas | map(attribute='name') | join(', ') }}">
-    {% if film.poster %}<meta property="og:image" content="{{ film.poster }}">{% endif %}
-{% endblock %}
+{% block title %}{{ film.title }} showtimes in Ulaanbaatar · UB Cinema Guide{% endblock %}
+{% block description %}{{ film.title }} showtimes at {{ film.cinemas | map(attribute='name') | join(', ') }}{% if film.genres %} · {{ film.genres | join(', ') }}{% endif %}{% if film.duration_minutes %} · {{ film.duration_minutes }} min{% endif %}{% if film.rating %} · {{ film.rating }}{% endif %}{% if film.description %} · {{ film.description | truncate(120) }}{% endif %}{% endblock %}
+{% block og_type %}video.movie{% endblock %}
+{% block og_image %}{% if film.poster %}{{ film.poster }}{% else %}{{ site_url }}/static/og-image.png{% endif %}{% endblock %}
 
 {% block style %}
         .back { font-size: 12px; color: var(--muted); font-weight: 700; text-decoration: none; white-space: nowrap; }
@@ -20,7 +17,7 @@
         .hero-poster { width: 240px; flex: none; background: #1a1a1a; border: 1px solid rgba(255,255,255,.15); margin-bottom: -110px; box-shadow: 0 40px 80px -30px #000; overflow: hidden; min-height: 200px; }
         .hero-poster img { width: 100%; height: auto; display: block; }
         .kicker { font-size: 13px; color: var(--fg-2); font-weight: 700; }
-        .title { font-size: clamp(44px, 8vw, 104px); line-height: .9; margin-top: 8px; text-wrap: balance; }
+        .title { font-size: clamp(44px, 8vw, 104px); line-height: .9; margin: 8px 0 0; text-wrap: balance; }
         .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; font-size: 12px; font-weight: 700; }
         .chips span { padding: 6px 10px; border: 1px solid rgba(255,255,255,.25); }
 
@@ -88,10 +85,10 @@
             <div class="hero-shade"></div>
         </div>
         <div class="wrap hero-inner">
-            <div class="hero-poster">{% if film.poster %}<img src="{{ film.poster }}" alt="">{% endif %}</div>
+            <div class="hero-poster">{% if film.poster %}<img src="{{ film.poster }}" alt="{{ film.title }} poster">{% endif %}</div>
             <div class="fadeup" style="min-width:0;padding-bottom:10px">
                 <div class="kicker">Now showing · {{ film.cinemas | length }} cinema{{ 's' if film.cinemas | length != 1 }}</div>
-                <div class="title oswald">{{ film.title }}</div>
+                <h1 class="title oswald">{{ film.title }}</h1>
                 <div class="chips" id="chips"></div>
             </div>
         </div>
@@ -176,7 +173,7 @@ function render() {
     // also showing
     const others = DATA.filter(m => m.id !== FILM.id && m.cinemas.some(c => c.showtimes.some(s => s.date === state.sel))).slice(0, 8);
     document.getElementById('others').innerHTML = others.length ? others.map(m => `
-        <a class="other" href="${filmHref(m.id)}?date=${state.sel}"><div class="p">${m.poster ? `<img src="${esc(m.poster)}" alt="" loading="lazy">` : ''}</div><div class="n oswald">${esc(m.title)}</div></a>`).join('')
+        <a class="other" href="${filmHref(m.id)}?date=${state.sel}"><div class="p">${m.poster ? `<img src="${esc(m.poster)}" alt="${esc(m.title)} poster" loading="lazy">` : ''}</div><div class="n oswald">${esc(m.title)}</div></a>`).join('')
         : `<div style="color:var(--muted);font-size:13px;font-weight:600">Nothing else listed for this day.</div>`;
 }
 render();

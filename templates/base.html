@@ -4,6 +4,33 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}UB Cinema Guide{% endblock %}</title>
+    <meta name="description" content="{% block description %}Today's cinema showtimes in Ulaanbaatar. Urgoo, Tengis and Prime Cineplex listings merged into one guide, updated every morning.{% endblock %}">
+    {% if canonical_url %}<link rel="canonical" href="{{ canonical_url }}">{% endif %}
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <meta name="theme-color" content="#0e0e0e">
+
+    <link rel="icon" href="{{ home_href }}static/favicon.ico" sizes="32x32">
+    <link rel="icon" href="{{ home_href }}static/favicon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="{{ home_href }}static/apple-touch-icon.png">
+    <link rel="manifest" href="{{ home_href }}static/site.webmanifest">
+
+    <meta property="og:site_name" content="UB Cinema Guide">
+    <meta property="og:type" content="{% block og_type %}website{% endblock %}">
+    <meta property="og:locale" content="en_US">
+    <meta property="og:title" content="{{ self.title() }}">
+    <meta property="og:description" content="{{ self.description() }}">
+    {% if canonical_url %}<meta property="og:url" content="{{ canonical_url }}">{% endif %}
+    <meta property="og:image" content="{% block og_image %}{{ site_url }}/static/og-image.png{% endblock %}">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{ self.title() }}">
+    <meta name="twitter:description" content="{{ self.description() }}">
+    <meta name="twitter:image" content="{{ self.og_image() }}">
+
+    <meta name="geo.region" content="MN-1">
+    <meta name="geo.placename" content="Ulaanbaatar">
+    <meta name="geo.position" content="47.9184;106.9177">
+    <meta name="ICBM" content="47.9184, 106.9177">
+    {% if jsonld %}<script type="application/ld+json">{{ jsonld | tojson }}</script>{% endif %}
     {% block head %}{% endblock %}
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Oswald:wght@500;600&display=swap" rel="stylesheet">
@@ -23,6 +50,7 @@
         .wrap { max-width: 1240px; margin: 0 auto; padding-left: 44px; padding-right: 44px; width: 100%; }
         @keyframes fadeup { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
         .fadeup { animation: fadeup .3s ease-out; }
+        .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
         /* top bar */
         .topbar { position: sticky; top: 0; z-index: 10; display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 16px 44px; flex-wrap: wrap; background: rgba(14,14,14,.85); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
