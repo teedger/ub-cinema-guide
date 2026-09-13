@@ -10,7 +10,9 @@
 
 {% block style %}
         .back { font-size: 12px; color: var(--muted); font-weight: 700; text-decoration: none; white-space: nowrap; }
-        .hero { position: relative; min-height: 460px; display: flex; align-items: flex-end; overflow: hidden; }
+        /* The poster overhangs the hero, so only the background layers are clipped, never the hero itself. */
+        .hero { position: relative; min-height: 460px; display: flex; align-items: flex-end; }
+        .hero-backdrop { position: absolute; inset: 0; overflow: hidden; }
         .hero-bg { position: absolute; inset: -40px; background-size: cover; background-position: center 20%; filter: blur(40px) saturate(1.1); opacity: .55; transform: scale(1.1); }
         .hero-shade { position: absolute; inset: 0; background: radial-gradient(ellipse 50% 70% at 30% 30%, rgba(255,255,255,.10), transparent 70%), linear-gradient(180deg, rgba(14,14,14,.15), #0e0e0e 96%); }
         .hero-inner { position: relative; display: flex; gap: 44px; align-items: flex-end; }
@@ -54,11 +56,12 @@
         .week .c.on { background: rgba(255,255,255,.06); }
         .week .c.on.has { color: var(--fg); }
 
-        .others { display: flex; gap: 18px; margin-top: 14px; overflow-x: auto; padding-bottom: 6px; }
+        .others { display: flex; align-items: flex-start; gap: 18px; margin-top: 14px; overflow-x: auto; padding-bottom: 6px; }
         .other { width: 130px; flex: none; text-decoration: none; opacity: .8; transition: opacity .2s, transform .2s; }
         .other:hover { opacity: 1; transform: translateY(-4px); }
-        .other .p { aspect-ratio: 2 / 3; background: #1a1a1a; overflow: hidden; }
-        .other .p img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        /* No fixed aspect ratio: thumbnails show the whole poster, whatever shape the cinema supplies. */
+        .other .p { background: #1a1a1a; overflow: hidden; min-height: 60px; }
+        .other .p img { width: 100%; height: auto; display: block; }
         .other .n { font-size: 20px; letter-spacing: .03em; margin-top: 8px; line-height: 1; }
 
         @media (max-width: 760px) {
@@ -80,8 +83,10 @@
 
 {% block content %}
     <div class="hero">
-        <div class="hero-bg" {% if film.poster %}style="background-image:url('{{ film.poster }}')"{% endif %}></div>
-        <div class="hero-shade"></div>
+        <div class="hero-backdrop">
+            <div class="hero-bg" {% if film.poster %}style="background-image:url('{{ film.poster }}')"{% endif %}></div>
+            <div class="hero-shade"></div>
+        </div>
         <div class="wrap hero-inner">
             <div class="hero-poster">{% if film.poster %}<img src="{{ film.poster }}" alt="">{% endif %}</div>
             <div class="fadeup" style="min-width:0;padding-bottom:10px">
