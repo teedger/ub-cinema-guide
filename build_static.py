@@ -6,6 +6,7 @@ Reads output/latest.json (written by scraper_ultimate.py) and writes:
     site/film/<id>.html      one detail page per film (shareable, with og: tags)
     site/data/latest.json    the same data for anyone who wants it raw
     site/.nojekyll           so Pages serves the files as they are
+    site/CNAME               keeps the custom domain across artifact deploys
 
 Exits non-zero when there is nothing to publish, so a broken scrape never
 replaces a good deployment.
@@ -23,6 +24,7 @@ from common import BASE_DIR
 from web_app import app
 
 SITE_DIR = os.path.join(BASE_DIR, "site")
+CUSTOM_DOMAIN = "ubcinema.info"
 MIN_FILMS = 1
 
 
@@ -50,6 +52,8 @@ def build():
     with open(os.path.join(SITE_DIR, "data", "latest.json"), "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False)
     open(os.path.join(SITE_DIR, ".nojekyll"), "w").close()
+    with open(os.path.join(SITE_DIR, "CNAME"), "w") as f:
+        f.write(CUSTOM_DOMAIN + "\n")
 
     broken = [name for name, info in data.get("cinemas", {}).items() if info.get("error")]
     print(f"✅ Built {SITE_DIR} with {len(movies)} films and {len(movies)} detail pages" + (f" (cinemas with errors: {', '.join(broken)})" if broken else ""))
