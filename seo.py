@@ -93,19 +93,26 @@ def movie_jsonld(movie, page_url, site_url=SITE_URL, today=None):
     return {"@context": "https://schema.org", "@graph": [m, *events, crumbs]}
 
 
-def home_jsonld(movies, site_url=SITE_URL):
-    """WebSite + the list of films now showing."""
+def home_jsonld(movies, site_url=SITE_URL, upcoming=None):
+    """WebSite + the lists of films now showing and coming soon. `upcoming` is {film id: first day}."""
+    upcoming = upcoming or {}
+
+    def item_list(name, films):
+        return {"@type": "ItemList", "name": name, "numberOfItems": len(films),
+                "itemListElement": [{"@type": "ListItem", "position": i + 1, "name": m["title"], "url": film_url(m["id"], site_url)}
+                                    for i, m in enumerate(films)]}
+
+    soon = sorted((m for m in movies if m["id"] in upcoming), key=lambda m: upcoming[m["id"]])
     return {"@context": "https://schema.org", "@graph": [
         {"@type": "WebSite", "@id": f"{site_url}/#website", "name": SITE_NAME, "url": f"{site_url}/",
          "description": SITE_DESCRIPTION, "inLanguage": ["en", "mn"],
          "about": {"@type": "City", "name": "Ulaanbaatar", "sameAs": "https://www.wikidata.org/wiki/Q23430"}},
-        {"@type": "ItemList", "name": "Films now showing in Ulaanbaatar", "numberOfItems": len(movies),
-         "itemListElement": [{"@type": "ListItem", "position": i + 1, "name": m["title"], "url": film_url(m["id"], site_url)}
-                             for i, m in enumerate(movies)]},
+        item_list("Films now showing in Ulaanbaatar", [m for m in movies if m["id"] not in upcoming]),
+        *([item_list("Films coming soon to Ulaanbaatar cinemas", soon)] if soon else []),
     ]}
 
 
-def film_summary(movie):
+def film_summary(movie, opening=""):
     bits = []
     if movie.get("genres"):
         bits.append(", ".join(movie["genres"]))
@@ -115,12 +122,14 @@ def film_summary(movie):
         bits.append(movie["rating"])
     cinemas = ", ".join(c["name"] for c in movie.get("cinemas", []))
     if cinemas:
-        bits.append(f"showing at {cinemas}")
+        bits.append(f"from {opening} at {cinemas}" + (", tickets on sale" if movie.get("showtime_count") else "")
+                    if opening else f"showing at {cinemas}")
     return " · ".join(bits)
 
 
-def write_crawler_files(site_dir, movies, data, site_url=SITE_URL):
-    """robots.txt, sitemap.xml and llms.txt next to the built pages."""
+def write_crawler_files(site_dir, movies, data, site_url=SITE_URL, upcoming=None):
+    """robots.txt, sitemap.xml and llms.txt next to the built pages. `upcoming` is {film id: first day}."""
+    upcoming = upcoming or {}
     day = (data.get("date") or date.today().isoformat())[:10]
 
     with open(os.path.join(site_dir, "robots.txt"), "w", encoding="utf-8") as f:
@@ -145,9 +154,14 @@ def write_crawler_files(site_dir, movies, data, site_url=SITE_URL):
              "- [Source code](https://github.com/teedger/ub-cinema-guide)", "",
              "## Cinemas covered", ""]
     lines += [f"- {name}: {url}" for name, url in CINEMA_SITES.items()]
-    lines += ["", f"## Films now showing (as of {day})", ""]
-    for m in movies:
-        summary = film_summary(m)
-        lines.append(f"- [{m['title']}]({film_url(m['id'], site_url)})" + (f": {summary}" if summary else ""))
+    soon = sorted((m for m in movies if m["id"] in upcoming), key=lambda m: upcoming[m["id"]])
+    for heading, films in ((f"Films now showing (as of {day})", [m for m in movies if m["id"] not in upcoming]),
+                           ("Films coming soon", soon)):
+        if not films:
+            continue
+        lines += ["", f"## {heading}", ""]
+        for m in films:
+            summary = film_summary(m, upcoming.get(m["id"], ""))
+            lines.append(f"- [{m['title']}]({film_url(m['id'], site_url)})" + (f": {summary}" if summary else ""))
     with open(os.path.join(site_dir, "llms.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")

@@ -4,23 +4,25 @@
 The homepage has one jQuery-UI tab per day (today and tomorrow). Every tab lists
 each film once with its branches and time links; each time link goes straight to
 the seat-selection page and carries the show's metadata in its query string.
+The tabs are in the server-rendered HTML, so plain HTTP is enough: no browser needed.
+
+/Home/Upcoming is plain server-rendered HTML listing the announced films with
+their release dates. Prime sells no advance tickets, so those have no showtimes.
 """
 
+import datetime
 import json
 import re
 import sys
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 from bs4 import BeautifulSoup
-from selenium.common.exceptions import TimeoutException
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
 
-from common import clean_text, make_driver, new_movie, showtime
+from common import clean_text, fetch_html, new_movie, showtime
 
 CINEMA = "Prime Cineplex"
 BASE_URL = "https://www.primecineplex.mn"
+UPCOMING_URL = BASE_URL + "/Home/Upcoming"
 TIME_PATTERN = re.compile(r"^(\d{1,2}:\d{2})\s*(.*)$")
 # Legend printed under every film on the site.
 HALL_NAMES = {"G": "General", "AT": "Atmos", "P": "Premium", "VIP": "VIP",
@@ -48,7 +50,8 @@ def booking_params(href):
 def parse_homepage(html):
     soup = BeautifulSoup(html, "html.parser")
     movies, seen_shows = {}, set()
-    for panel in soup.select("div.ui-tabs-panel"):
+    # One <div id="tab_N" class="tab-content"> per day; jQuery UI adds ui-tabs-panel in a browser.
+    for panel in soup.select("div[id^='tab_'], div.ui-tabs-panel"):
         grid = panel.select_one("div.three.column.grid")
         if grid is None:
             continue
@@ -102,23 +105,49 @@ def parse_homepage(html):
     return list(movies.values())
 
 
-def scrape(driver=None):
-    own_driver = driver is None
-    driver = driver or make_driver()
+def parse_upcoming(html):
+    """Cards on /Home/Upcoming: label/value rows (Title, Type '2D - PG13 13+',
+    Release Date 'Fri, 18 Sep 2026', Duration '111 mins', Genre)."""
+    movies = []
+    for card in BeautifulSoup(html, "html.parser").select("div.column.sammoviemousehover"):
+        labels = [clean_text(el.get_text(" ", strip=True)) for el in card.select(".comingsoon_title")]
+        values = [clean_text(el.get_text(" ", strip=True)).lstrip(":").strip() for el in card.select("[class*='comingsoon_des']")]
+        info = dict(zip(labels, values))
+        detail_link = card.select_one("a[href*='EventID']")
+        if not info.get("Title") or detail_link is None:
+            continue
+        event_id = re.search(r"EventID=(\d+)", detail_link["href"], re.I)
+        fmt, _, rating = info.get("Type", "").partition(" - ")
+        try:
+            release = datetime.datetime.strptime(info.get("Release Date", ""), "%a, %d %b %Y").date().isoformat()
+        except ValueError:
+            release = ""
+        poster = card.find("img")
+        movie = new_movie(CINEMA, event_id.group(1) if event_id else info["Title"], info["Title"], UPCOMING_URL,
+                          poster=poster.get("src", "") if poster else "", duration=info.get("Duration", ""),
+                          genres=[g for g in info.get("Genre", "").split(",")], rating=rating, start_date=release)
+        movie["format"] = fmt
+        movies.append(movie)
+    return movies
+
+
+def scrape_upcoming():
     try:
-        driver.get(BASE_URL + "/")
-        WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "div.ui-tabs-panel div.column"))
-        )
-        movies = parse_homepage(driver.page_source)
-        print(f"Prime Cineplex: {len(movies)} films listed")
-        return movies
-    except TimeoutException:
-        print("❌ Prime Cineplex: the film tabs never appeared")
+        return parse_upcoming(fetch_html(UPCOMING_URL))
+    except Exception as e:  # the day's schedule matters more than the announcements
+        print(f"⚠️ Prime Cineplex: could not read the upcoming films: {e}")
         return []
-    finally:
-        if own_driver:
-            driver.quit()
+
+
+def scrape():
+    movies = parse_homepage(fetch_html(BASE_URL + "/"))
+    if not movies:
+        print("❌ Prime Cineplex: no film tabs on the homepage")
+    # A film that opens tomorrow can be in both lists: keep the one with the showtimes.
+    showing = {m["source_id"] for m in movies}
+    upcoming = [m for m in scrape_upcoming() if m["source_id"] not in showing]
+    print(f"Prime Cineplex: {len(movies)} films listed, {len(upcoming)} coming soon")
+    return movies + upcoming
 
 
 # Kept for callers that used the old two-step name.
@@ -128,7 +157,7 @@ movie_extract = scrape
 if __name__ == "__main__":
     result = scrape()
     for m in result:
-        print(f"- {m['title']} | {m['rating']} | {m['duration']} | {len(m['showtimes'])} screenings")
+        print(f"- {m['title']} | {m['rating']} | {m['duration']} | opens {m['start_date']} | {len(m['showtimes'])} screenings")
     if len(sys.argv) > 1:
         with open(sys.argv[1], "w", encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False, indent=2)

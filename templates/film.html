@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}{{ film.title }} showtimes in Ulaanbaatar · UB Cinema Guide{% endblock %}
-{% block description %}{{ film.title }} showtimes at {{ film.cinemas | map(attribute='name') | join(', ') }}{% if film.genres %} · {{ film.genres | join(', ') }}{% endif %}{% if film.duration_minutes %} · {{ film.duration_minutes }} min{% endif %}{% if film.rating %} · {{ film.rating }}{% endif %}{% if film.description %} · {{ film.description | truncate(120) }}{% endif %}{% endblock %}
+{% block description %}{{ film.title }} {% if upcoming.get(film.id) %}opens {{ upcoming[film.id] }} in Ulaanbaatar: {% endif %}showtimes at {{ film.cinemas | map(attribute='name') | join(', ') }}{% if film.genres %} · {{ film.genres | join(', ') }}{% endif %}{% if film.duration_minutes %} · {{ film.duration_minutes }} min{% endif %}{% if film.rating %} · {{ film.rating }}{% endif %}{% if film.description %} · {{ film.description | truncate(120) }}{% endif %}{% endblock %}
 {% block og_type %}video.movie{% endblock %}
 {% block og_image %}{% if film.poster %}{{ film.poster }}{% else %}{{ site_url }}/static/og-image.png{% endif %}{% endblock %}
 
@@ -42,6 +42,9 @@
         .row .times { display: flex; flex-wrap: wrap; gap: 6px; }
         .row .site { font-size: 12px; color: var(--muted); font-weight: 700; white-space: nowrap; text-decoration: none; }
         .row .site:hover { color: var(--fg); }
+        .row .opens { font-size: 13px; color: var(--muted); font-weight: 600; }
+        /* Inside the page the strip starts at the left edge instead of being centred. */
+        .daystrip.large > :first-child { margin-left: 0; }
 
         .week { display: grid; grid-template-columns: 150px repeat(7, minmax(0, 1fr)); margin-top: 14px; border-top: 1px solid var(--line-3); font-size: 12px; }
         .week > div { padding: 10px 0; border-bottom: 1px solid var(--line-2); }
@@ -87,7 +90,8 @@
         <div class="wrap hero-inner">
             <div class="hero-poster">{% if film.poster %}<img src="{{ film.poster }}" alt="{{ film.title }} poster">{% endif %}</div>
             <div class="fadeup" style="min-width:0;padding-bottom:10px">
-                <div class="kicker">Now showing · {{ film.cinemas | length }} cinema{{ 's' if film.cinemas | length != 1 }}</div>
+                {% set opening = upcoming.get(film.id) %}
+                <div class="kicker">{% if opening %}Coming soon · from <span id="opening">{{ opening }}</span>{% else %}Now showing{% endif %} · {{ film.cinemas | length }} cinema{{ 's' if film.cinemas | length != 1 }}</div>
                 <h1 class="title oswald">{{ film.title }}</h1>
                 <div class="chips" id="chips"></div>
             </div>
@@ -114,11 +118,11 @@
                 <div><div class="label">Screenings · <span id="selRel"></span></div><div class="sel-long oswald" id="selLong"></div></div>
                 <div class="label" id="dayCount"></div>
             </div>
-            <div class="daystrip large" id="days" style="justify-content:flex-start;margin-top:20px"></div>
+            <div class="daystrip large" id="days" style="margin-top:20px"></div>
             <div class="rows" id="rows"></div>
             <div class="legend" style="margin-top:14px"><span><i class="direct"></i>opens the seat picker for that exact show</span><span><i></i>opens the film page (Tengis books via a pop-up)</span></div>
 
-            <div class="label" style="margin-top:56px">Week at a glance</div>
+            <div class="label" style="margin-top:56px" id="weekLabel">Week at a glance</div>
             <div class="week" id="week"></div>
 
             <div class="label" style="margin-top:56px">Also showing <span id="alsoRel"></span></div>
@@ -135,17 +139,22 @@ const FILM_HREF = {{ film_href | tojson }};
 const filmHref = id => FILM_HREF.replace('{id}', encodeURIComponent(id));
 const state = { sel: TODAY };
 try { const q = new URLSearchParams(location.search); if (q.get('date')) state.sel = q.get('date'); } catch (e) {}
-if (!FILM.dates.includes(state.sel) && FILM.dates.length && dayOff(FILM.dates[0]) > 0) state.sel = FILM.dates[0];
+// A film that is not showing yet opens on its first day: first advance screening or announced opening.
+const OPENING = upcomingDate(FILM);
+if (!FILM.dates.includes(state.sel) && OPENING) state.sel = OPENING;
+const openingEl = document.getElementById('opening');
+if (openingEl && OPENING) openingEl.textContent = longDay(OPENING);
+const EXTRA_DAYS = eventDates([FILM]);
 
 document.querySelectorAll('.alias .dot').forEach(el => el.style.background = CIN[el.dataset.cinema] || '#fff');
 const dur = document.getElementById('duration');
 if (dur && FILM.duration_minutes) dur.textContent = `${fmtDuration(FILM.duration_minutes)} · ${FILM.duration_minutes} min`;
 document.getElementById('chips').innerHTML = [...formatsOf(FILM), FILM.rating, FILM.duration_minutes ? `${FILM.duration_minutes} min` : ''].filter(Boolean).map(c => `<span>${esc(c)}</span>`).join('');
 
-const cinemasOn = date => [...new Set(FILM.cinemas.filter(c => c.showtimes.some(s => s.date === date)).map(c => c.name))];
+const cinemasOn = date => [...new Set(FILM.cinemas.filter(c => c.showtimes.some(s => s.date === date) || opensOn(c, date)).map(c => c.name))];
 
 function render() {
-    dayStrip(document.getElementById('days'), state.sel, id => { state.sel = id; render(); }, id => dayOff(id) < 0 ? [] : cinemasOn(id).map(n => CIN[n]));
+    dayStrip(document.getElementById('days'), state.sel, id => { state.sel = id; render(); }, id => dayOff(id) < 0 ? [] : cinemasOn(id).map(n => CIN[n]), EXTRA_DAYS);
     document.getElementById('selRel').textContent = relDay(state.sel).toLowerCase();
     document.getElementById('alsoRel').textContent = relDay(state.sel).toLowerCase();
     document.getElementById('selLong').textContent = longDay(state.sel);
@@ -156,22 +165,26 @@ function render() {
     document.getElementById('rows').innerHTML = groups.length ? groups.map(g => `
         <div class="row">
             <div><div class="cin"><span class="dot" style="background:${g.color}"></span>${esc(g.cinema)}</div><div class="branch">${esc(g.branch)}</div></div>
-            <div class="times">${g.times.map(s => timeChip(s, [s.hall, s.format].filter(Boolean).join(' · ') || (s.end_time ? `ends ${s.end_time}` : ''))).join('')}</div>
+            ${g.opens ? '<div class="opens">Opens this day · tickets not on sale yet</div>'
+                : `<div class="times">${g.times.map(s => timeChip(s, [s.hall, s.format].filter(Boolean).join(' · ') || (s.end_time ? `ends ${s.end_time}` : ''))).join('')}</div>`}
             <a class="site" href="${esc(g.url)}" target="_blank" rel="noopener">${SITE[g.cinema] || g.cinema} ↗</a>
         </div>`).join('') : `<div style="padding:24px 0;color:var(--muted);font-size:13px;font-weight:600;border-bottom:1px solid var(--line-2)">No screenings on this day.</div>`;
 
     // week at a glance
-    const week = []; for (let i = 0; i < 7; i++) { const d = new Date(TODAY0); d.setDate(TODAY0.getDate() + i); week.push({ id: isoDate(d), label: i === 0 ? 'Today' : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' }) }); }
+    // A film that arrives more than a week from now gets its opening week instead of seven empty days.
+    const start = new Date(OPENING && dayOff(OPENING) > 6 ? OPENING + 'T00:00:00' : TODAY0);
+    document.getElementById('weekLabel').textContent = start > TODAY0 ? `Opening week · from ${shortDay(isoDate(start))}` : 'Week at a glance';
+    const week = []; for (let i = 0; i < 7; i++) { const d = new Date(start); d.setDate(start.getDate() + i); week.push({ id: isoDate(d), label: isoDate(d) === TODAY ? 'Today' : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' }) }); }
     let html = '<div></div>' + week.map(w => `<div class="h ${w.id === state.sel ? 'on' : ''}">${esc(w.label)}</div>`).join('');
     for (const c of FILM.cinemas) {
         html += `<div class="r"><span class="dot" style="background:${CIN[c.name]}"></span>${esc(c.name)}</div>`;
-        html += week.map(w => { const k = c.showtimes.filter(s => s.date === w.id).length; return `<div class="c ${k ? 'has' : ''} ${w.id === state.sel ? 'on' : ''}" data-date="${w.id}">${k ? `${k} show${k > 1 ? 's' : ''}` : '—'}</div>`; }).join('');
+        html += week.map(w => { const k = c.showtimes.filter(s => s.date === w.id).length, opens = opensOn(c, w.id); return `<div class="c ${k || opens ? 'has' : ''} ${w.id === state.sel ? 'on' : ''}" data-date="${w.id}">${k ? `${k} show${k > 1 ? 's' : ''}` : opens ? 'opens' : '—'}</div>`; }).join('');
     }
     const weekEl = document.getElementById('week'); weekEl.innerHTML = html;
     weekEl.querySelectorAll('.c').forEach(el => el.onclick = () => { state.sel = el.dataset.date; render(); });
 
     // also showing
-    const others = DATA.filter(m => m.id !== FILM.id && m.cinemas.some(c => c.showtimes.some(s => s.date === state.sel))).slice(0, 8);
+    const others = DATA.filter(m => m.id !== FILM.id && m.cinemas.some(c => c.showtimes.some(s => s.date === state.sel) || opensOn(c, state.sel))).slice(0, 8);
     document.getElementById('others').innerHTML = others.length ? others.map(m => `
         <a class="other" href="${filmHref(m.id)}?date=${state.sel}"><div class="p">${m.poster ? `<img src="${esc(m.poster)}" alt="${esc(m.title)} poster" loading="lazy">` : ''}</div><div class="n oswald">${esc(m.title)}</div></a>`).join('')
         : `<div style="color:var(--muted);font-size:13px;font-weight:600">Nothing else listed for this day.</div>`;

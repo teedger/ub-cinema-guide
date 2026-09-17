@@ -118,7 +118,8 @@ def merge_cluster(cluster):
     cinemas = {}
     for m in cluster:
         entry = cinemas.setdefault(m["cinema"], {
-            "name": m["cinema"], "url": m["url"], "title": m["title"], "showtimes": [],
+            "name": m["cinema"], "url": m["url"], "title": m["title"], "start_date": m.get("start_date", ""),
+            "showtimes": [],
         })
         fmt = format_from_title(m["title"])
         for s in m["showtimes"]:
@@ -157,6 +158,16 @@ def merge_cluster(cluster):
         "dates": sorted({s["date"] for s in all_shows if s["date"]}),
         "showtime_count": len(all_shows),
     }
+
+
+def upcoming_date(movie, today):
+    """The day a film that is not showing yet arrives: its first advance screening or
+    its announced opening, whichever is sooner. '' when it is already showing.
+    templates/base.html has the same rule in JavaScript (upcomingDate)."""
+    start, dates = movie.get("start_date") or "", movie.get("dates") or []
+    if (start and start <= today) or any(d <= today for d in dates):
+        return ""
+    return min([d for d in (start, *dates[:1]) if d], default="")
 
 
 def merge_movies(movies, aliases=None):

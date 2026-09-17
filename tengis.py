@@ -1,160 +1,111 @@
 #!/usr/bin/env python3
 """Tengis cinema scraper (www.tengis.mn, Next.js).
 
-movie_extract() lists the films in the homepage #movies grid, movie_info() reads
-each film page: details plus the full schedule (branch -> date -> times). Tengis
-has no per-screening booking link, so showtimes link to the film page.
+The homepage is statically rendered and carries everything as JSON in
+__NEXT_DATA__, so plain HTTP is enough: no browser needed.
+
+    ongoings       one entry per schedule tab (today, tomorrow, pre-order day), each
+                   with its films and their sessions in both theatres
+    preorderings   films whose tickets are already on sale before they open
+    upcomings      announced films: opening date only, no sessions yet
+
+A film showing in both theatres exists twice on the site under one slug (the
+Гэгээнтэн copy is a child of the Тэнгис 1 film), so records are keyed by slug.
+Tengis has no per-screening booking link, so showtimes link to the film page.
 """
 
 import json
-import re
 import sys
-from urllib.parse import parse_qs, urlsplit
 
-from bs4 import BeautifulSoup
-from selenium.common.exceptions import TimeoutException
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
-
-from common import clean_text, make_driver, new_movie, showtime
+from common import duration_text, fetch_html, local_datetime, new_movie, next_data, showtime
 
 CINEMA = "Tengis"
 BASE_URL = "https://www.tengis.mn"
-TIME_PATTERN = re.compile(r"^(\d{1,2}:\d{2})\s*(.*)$")
 
 
 def absolute(href):
     return href if href.startswith("http") else BASE_URL + href
 
 
-def poster_url(img):
-    """Next.js serves posters through /_next/image?url=<encoded original>."""
-    src = img.get("src", "") if img else ""
-    if "/_next/image" in src:
-        original = parse_qs(urlsplit(src).query).get("url")
-        if original:
-            return original[0]
-    return absolute(src) if src else ""
+def poster_url(path):
+    """Absolute poster URL; the site stores the text 'undefined' for films without one."""
+    path = path or ""
+    return absolute(path) if path.startswith(("/", "http")) else ""
 
 
-def movie_extract(driver=None):
-    """Return [{source_id, title, url, poster}] for the films in the #movies grid."""
-    own_driver = driver is None
-    driver = driver or make_driver()
-    movies, seen = [], set()
-    try:
-        driver.get(BASE_URL + "/")
-        WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "#movies a[href^='/film/']"))
-        )
-        section = BeautifulSoup(driver.page_source, "html.parser").find(id="movies")
-        for card in section.select(".group"):
-            title_link = card.select_one("a.block[href^='/film/']") or card.select_one("a[href^='/film/']")
-            if title_link is None or title_link["href"] in seen:
-                continue
-            seen.add(title_link["href"])
-            movies.append({
-                "source_id": title_link["href"].rsplit("/", 1)[-1],
-                "title": clean_text(title_link.get("title") or title_link.get_text(" ", strip=True)),
-                "url": absolute(title_link["href"]),
-                "poster": poster_url(card.find("img")),
-            })
-    except TimeoutException:
-        print("❌ Tengis: the #movies grid never appeared")
-    finally:
-        if own_driver:
-            driver.quit()
-    return movies
+def page_repo(url):
+    repo = next_data(fetch_html(url)).get("props", {}).get("pageProps", {}).get("repo")
+    if not repo:
+        raise RuntimeError(f"Tengis: no page data found on {url}")
+    return repo
 
 
-def parse_film_page(html, link):
-    soup = BeautifulSoup(html, "html.parser")
-    container = soup.select_one("div.container.my-10") or soup
-    heading = container.find("h1")
-    title = heading.get_text(" ", strip=True) if heading else link["title"]
-
-    rating_el = container.select_one("div.absolute.left-4.top-4 span")
-    genres = [s.get_text(" ", strip=True) for s in container.select("div.absolute.bottom-4 span")]
-    poster_img = container.select_one("div[class*='aspect-[3/4]'] img") or container.find("img")
-
-    details = {"duration": "", "start_date": "", "description": ""}
-    for p in container.select("ul.flex.flex-col.gap-2 li p"):
-        label_el = p.find("span")
-        label = label_el.get_text(strip=True) if label_el else ""
-        value = clean_text(p.get_text(" ", strip=True).replace(label, "", 1))
-        if label.startswith("Үргэлжлэх хугацаа"):
-            details["duration"] = value
-        elif label.startswith("Нээлтийн огноо"):
-            details["start_date"] = value
-        elif label.startswith("Танилцуулга"):
-            details["description"] = value
-
-    movie = new_movie(CINEMA, link["source_id"], title, link["url"],
-                      poster=poster_url(poster_img) or link.get("poster", ""),
-                      genres=genres, rating=rating_el.get_text(strip=True) if rating_el else "",
-                      **details)
-
-    # Schedule list: <li><p class="text-xl">branch</p></li> followed by one
-    # <li><p class="mb-4">date</p> ...time chips...</li> per date.
-    branch = ""
-    for li in container.select("ul.flex.flex-col.gap-4 > li"):
-        branch_el = li.select_one("p.text-xl")
-        date_el = li.select_one("p.mb-4")
-        if branch_el is not None:
-            branch = branch_el.get_text(strip=True)
-            continue
-        if date_el is None:
-            continue
-        date = date_el.get_text(strip=True)
-        for chip in li.select("span"):
-            match = TIME_PATTERN.match(chip.get_text(" ", strip=True))
-            if not match:
-                continue
-            movie["showtimes"].append(showtime(
-                date, branch, match.group(1), fmt=match.group(2), url=link["url"],
-                available="cursor-not-allowed" not in " ".join(chip.get("class", [])),
-            ))
-    return movie
+def film_record(film):
+    opening = local_datetime(film.get("openDate") or film.get("nationalOpenDate"))
+    genres = [(g.get("genre") or {}).get("translated") or (g.get("genre") or {}).get("title") for g in film.get("genres") or []]
+    return new_movie(CINEMA, film["slug"], film["title"], f"{BASE_URL}/film/{film['slug']}",
+                     poster=poster_url(film.get("verticalPosterUrl")),
+                     description=film.get("description"), genres=genres,
+                     duration=duration_text(film.get("duration")), rating=film.get("rating") or "",
+                     start_date=opening.date().isoformat() if opening else "")
 
 
-def movie_info(links, driver=None):
-    own_driver = driver is None
-    driver = driver or make_driver()
-    movies = []
-    try:
-        for link in links:
-            try:
-                driver.get(link["url"])
-                WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "div.container.my-10 h1"))
-                )
-                movies.append(parse_film_page(driver.page_source, link))
-                print(f"Tengis: scraped {link['url']}")
-            except TimeoutException:
-                print(f"❌ Tengis: film page never loaded: {link['url']}")
-            except Exception as e:
-                print(f"⚠️ Tengis: error on {link['url']}: {e}")
-    finally:
-        if own_driver:
-            driver.quit()
-    return movies
+def session_showtime(session, branch, url):
+    start = local_datetime(session.get("showTime"))
+    if start is None:
+        return None
+    labels = list(session.get("attributes") or [])
+    labels += [name for flag, name in (("isVip", "VIP"), ("isPremium", "Premium")) if session.get(flag)]
+    # The site greys out DELETED sessions: they have started or were withdrawn.
+    return showtime(start.date().isoformat(), branch, start.strftime("%H:%M"), hall=session.get("screenName") or "",
+                    fmt=" ".join(labels), url=url,
+                    available=session.get("status") == "ENABLED" and not session.get("soldOut"))
+
+
+def film_page_sessions(slug, theatre_names):
+    """[(session, branch)] from a film page: the film's own sessions plus its other-theatre copies'."""
+    film = page_repo(f"{BASE_URL}/film/{slug}").get("movie") or {}
+    found = []
+    for copy in [film] + list(film.get("children") or []):
+        branch = theatre_names.get(copy.get("movieTheatreId"), "")
+        found += [(session, branch) for session in copy.get("sessions") or []]
+    return found
 
 
 def scrape():
-    driver = make_driver()
-    try:
-        links = movie_extract(driver)
-        print(f"Tengis: {len(links)} films listed")
-        return movie_info(links, driver)
-    finally:
-        driver.quit()
+    repo = page_repo(BASE_URL + "/")
+    theatre_names = {t["id"]: t["title"] for t in repo.get("theatres") or []}
+    movies, seen_sessions = {}, set()
+
+    def add_sessions(movie, sessions):
+        for session, branch in sessions:
+            show = session_showtime(session, branch, movie["url"])
+            if show is not None and session.get("id") not in seen_sessions:
+                seen_sessions.add(session.get("id"))
+                movie["showtimes"].append(show)
+
+    for day in repo.get("ongoings") or []:
+        for film in day.get("movies") or []:
+            movie = movies.setdefault(film["slug"], film_record(film))
+            add_sessions(movie, [(session, theatre.get("title", ""))
+                                 for theatre in film.get("theatres") or [] for session in theatre.get("sessions") or []])
+    for film in (repo.get("preorderings") or []) + (repo.get("upcomings") or []):
+        movie = movies.setdefault(film["slug"], film_record(film))
+        if film.get("type") == "PREORDERING" and not movie["showtimes"]:
+            # On sale but not under any homepage tab: the film page has the sessions.
+            try:
+                add_sessions(movie, film_page_sessions(film["slug"], theatre_names))
+            except Exception as e:
+                print(f"⚠️ Tengis: no sessions for {film['title']}: {e}")
+
+    print(f"Tengis: {len(movies)} films listed, {sum(1 for m in movies.values() if not m['showtimes'])} of them coming soon")
+    return list(movies.values())
 
 
 if __name__ == "__main__":
     result = scrape()
     for m in result:
-        print(f"- {m['title']} | {m['rating']} | {m['duration']} | {len(m['showtimes'])} screenings")
+        print(f"- {m['title']} | {m['rating']} | {m['duration']} | opens {m['start_date']} | {len(m['showtimes'])} screenings")
     if len(sys.argv) > 1:
         with open(sys.argv[1], "w", encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False, indent=2)

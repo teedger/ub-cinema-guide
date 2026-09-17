@@ -6,6 +6,7 @@ Data comes from output/latest.json, written by scraper_ultimate.py. The
 "Refresh" button runs the scrapers in a background thread.
 """
 
+import datetime
 import os
 from threading import Thread
 
@@ -14,6 +15,7 @@ from flask import Flask, abort, jsonify, render_template, request
 import scraper_ultimate
 import seo
 import watchlist
+from merge import upcoming_date
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -47,10 +49,17 @@ def run_scraper():
         scraping_status["is_scraping"] = False
 
 
+def upcoming_films(data):
+    """{film id: first day} for the films that are not showing yet."""
+    today = datetime.date.today().isoformat()
+    return {m["id"]: day for m in data.get("movies", []) if (day := upcoming_date(m, today))}
+
+
 def page_context(data):
     """Variables every page needs; the static build overrides the hrefs."""
     return {
         "meta": {"scraped_at": data.get("scraped_at"), "date": data.get("date"), "cinemas": data.get("cinemas", {})},
+        "upcoming": upcoming_films(data),
         "home_href": "/", "data_href": "/api/movies", "film_href": "/film/{id}", "static_mode": False,
         "site_url": seo.SITE_URL,
     }
@@ -60,7 +69,7 @@ def page_context(data):
 def index():
     data = load_data()
     return render_template("index.html", movies=data["movies"], scraping_status=scraping_status,
-                           jsonld=seo.home_jsonld(data["movies"]), **page_context(data))
+                           jsonld=seo.home_jsonld(data["movies"], upcoming=upcoming_films(data)), **page_context(data))
 
 
 @app.route("/film/<film_id>")

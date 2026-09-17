@@ -41,6 +41,7 @@
             --urgoo: #3b82f6; --tengis: #ef4444; --prime: #f59e0b; --skywing: #a855f7; --direct: #4ade80;
         }
         * { box-sizing: border-box; }
+        [hidden] { display: none !important; }
         body { margin: 0; background: var(--bg); color: var(--fg); font-family: 'Manrope', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
         a { color: var(--fg); }
         a:hover { color: #fff; }
@@ -62,8 +63,16 @@
         .search:focus { border-color: var(--muted); }
 
         /* day strip */
-        .daystrip { display: flex; gap: 2px; min-width: 0; overflow-x: auto; flex: 1; justify-content: center; scrollbar-width: none; }
+        /* Scrolls sideways with no visible scrollbar; the edges fade out where more days are hidden.
+           Centred with auto margins, not justify-content, so an overflowing strip can still reach its first day. */
+        .daystrip { display: flex; gap: 2px; min-width: 0; overflow-x: auto; flex: 1; scrollbar-width: none; -ms-overflow-style: none; overscroll-behavior-x: contain; --fade-l: #000; --fade-r: #000;
+            -webkit-mask-image: linear-gradient(to right, var(--fade-l), #000 56px, #000 calc(100% - 56px), var(--fade-r)); mask-image: linear-gradient(to right, var(--fade-l), #000 56px, #000 calc(100% - 56px), var(--fade-r)); }
         .daystrip::-webkit-scrollbar { display: none; }
+        .daystrip.more-left { --fade-l: transparent; }
+        .daystrip.more-right { --fade-r: transparent; }
+        .daystrip > :first-child { margin-left: auto; }
+        .daystrip > :last-child { margin-right: auto; }
+        .daystrip .gap { flex: none; width: 1px; margin: 10px 8px; background: var(--line-3); }
         .day { width: 52px; flex: none; padding: 7px 0; text-align: center; cursor: pointer; border-radius: 999px; background: transparent; color: var(--fg); border: 0; font-family: inherit; }
         .day .tag { font-size: 8px; font-weight: 800; letter-spacing: .1em; height: 9px; color: var(--muted); }
         .day .num { font-size: 15px; font-weight: 800; line-height: 1; margin-top: 2px; }
@@ -113,7 +122,8 @@
         @media (max-width: 760px) {
             .wrap, .topbar { padding-left: 18px; padding-right: 18px; }
             .topbar { gap: 12px; }
-            .daystrip { order: 3; flex-basis: 100%; justify-content: flex-start; }
+            .daystrip { order: 3; flex-basis: 100%; }
+            .daystrip > :first-child { margin-left: 0; }
             .search { width: 120px; }
         }
         {% block style %}{% endblock %}
@@ -163,11 +173,32 @@
         const fmts = formatsOf(movie).filter(f => /imax|4dx|3d/i.test(f)).map(f => f.toUpperCase().match(/IMAX|4DX|3D/)[0]);
         return [movie.genres?.[0], fmtDuration(movie.duration_minutes) || movie.duration, movie.rating, ...new Set(fmts)].filter(Boolean).join(' · ');
     }
-    /** Screenings of `movie` on `date`, grouped cinema -> branch. */
+    const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];  // en-GB would say "Sept"
+    const shortDay = iso => { const d = new Date(iso + 'T00:00:00'); return `${d.toLocaleDateString('en-GB', { weekday: 'short' })} ${d.getDate()} ${MONTHS[d.getMonth()]}`; };
+    /** The day a film that is not showing yet arrives: its first advance screening or its announced
+        opening, whichever is sooner. '' when it is already showing. Same rule as merge.upcoming_date. */
+    function upcomingDate(movie) {
+        if ((movie.start_date && movie.start_date <= TODAY) || movie.dates.some(d => d <= TODAY)) return '';
+        return [movie.start_date, movie.dates[0]].filter(Boolean).sort()[0] || '';
+    }
+    /** A cinema that has announced the film for `date` but sells no tickets for it yet. */
+    const opensOn = (cinema, date) => !cinema.showtimes.length && cinema.start_date === date && date > TODAY;
+    /** Future days worth a place in the day strip: advance screenings and announced openings. */
+    function eventDates(movies) {
+        const days = new Set();
+        for (const m of movies) for (const c of m.cinemas) {
+            for (const s of c.showtimes) if (s.date > TODAY) days.add(s.date);
+            if (opensOn(c, c.start_date)) days.add(c.start_date);
+        }
+        return [...days].sort();
+    }
+    /** Screenings of `movie` on `date`, grouped cinema -> branch. A cinema that only opens
+        the film that day gets one group with `opens` set and no times. */
     function groupsFor(movie, date, cinemaFilter) {
         const out = [];
         for (const c of movie.cinemas) {
             if (cinemaFilter && c.name !== cinemaFilter) continue;
+            if (opensOn(c, date)) { out.push({ cinema: c.name, url: c.url, branch: '', color: CIN[c.name], cls: CLS[c.name], times: [], opens: true }); continue; }
             const byBranch = new Map();
             for (const s of c.showtimes) {
                 if (s.date !== date) continue;
@@ -190,21 +221,52 @@
         const inner = `<span class="tm">${esc(s.time)}</span>${sub ? `<span class="sub">${esc(sub)}</span>` : ''}`;
         return s.url ? `<a class="${cls}" href="${esc(s.url)}" target="_blank" rel="noopener" title="${esc(tip)}">${inner}</a>` : `<span class="${cls}">${inner}</span>`;
     }
-    function dayStrip(container, sel, onPick, dotsFor, from = -3, to = 6) {
+    /** Days from `from` to `to` around today, running on for as long as the next day has
+        something on; then (after a divider) the later `extra` dates. Those are sparse, so
+        each one carries its month. */
+    function dayStrip(container, sel, onPick, dotsFor, extra = [], from = -3, to = 6) {
         container.innerHTML = '';
-        for (let i = from; i <= to; i++) {
-            const d = new Date(TODAY0); d.setDate(TODAY0.getDate() + i); const id = isoDate(d);
+        const ids = [];
+        const wanted = new Set([...extra, sel]);
+        for (let i = from; ; i++) {
+            const d = new Date(TODAY0); d.setDate(TODAY0.getDate() + i);
+            if (i > to && !wanted.has(isoDate(d))) break;
+            ids.push(isoDate(d));
+        }
+        const later = [...wanted].filter(id => id > ids[ids.length - 1]).sort();
+        for (const id of [...ids, ...later]) {
+            const d = new Date(id + 'T00:00:00'), off = dayOff(id), far = later.includes(id);
+            if (far && id === later[0]) container.insertAdjacentHTML('beforeend', '<span class="gap"></span>');
             const b = document.createElement('button');
-            b.className = `day ${id === sel ? 'sel' : ''} ${i < 0 ? 'past' : ''}`;
+            b.className = `day ${id === sel ? 'sel' : ''} ${off < 0 ? 'past' : ''}`;
+            b.title = longDay(id);
+            const tag = off === 0 ? 'TODAY' : far || d.getDate() === 1 ? MONTHS[d.getMonth()].toUpperCase() : '';
             const dots = dotsFor ? dotsFor(id) : [];
-            b.innerHTML = `<div class="tag">${i === 0 ? 'TODAY' : ''}</div><div class="num">${d.getDate()}</div><div class="dow">${d.toLocaleDateString('en-GB', { weekday: 'short' })}</div>`
+            b.innerHTML = `<div class="tag">${tag}</div><div class="num">${d.getDate()}</div><div class="dow">${d.toLocaleDateString('en-GB', { weekday: 'short' })}</div>`
                 + (dotsFor ? `<div class="dots">${dots.map(c => `<span style="background:${c}"></span>`).join('')}</div>` : '');
             b.onclick = () => onPick(id);
             container.appendChild(b);
         }
         const selEl = container.querySelector('.day.sel');
         // Centre the selected day horizontally without scrolling the page itself.
-        if (selEl && container.scrollWidth > container.clientWidth) container.scrollLeft = selEl.offsetLeft - (container.clientWidth - selEl.offsetWidth) / 2;
+        if (selEl && container.scrollWidth > container.clientWidth) container.scrollLeft = selEl.offsetLeft - container.offsetLeft - (container.clientWidth - selEl.offsetWidth) / 2;
+        const fades = () => {
+            container.classList.toggle('more-left', container.scrollLeft > 2);
+            container.classList.toggle('more-right', container.scrollLeft < container.scrollWidth - container.clientWidth - 2);
+        };
+        if (!container.dataset.wired) {
+            container.dataset.wired = '1';
+            container.addEventListener('scroll', fades, { passive: true });
+            window.addEventListener('resize', fades);
+            // A plain mouse wheel has no sideways axis: let it scroll the strip while the pointer is on it.
+            container.addEventListener('wheel', e => {
+                const room = e.deltaY > 0 ? container.scrollWidth - container.clientWidth - container.scrollLeft : container.scrollLeft;
+                if (room < 1 || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;  // at the end: the page scrolls as usual
+                e.preventDefault();
+                container.scrollLeft += e.deltaY;
+            }, { passive: false });
+        }
+        fades();
     }
 </script>
 {% block extra_js %}{% endblock %}

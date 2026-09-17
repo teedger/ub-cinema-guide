@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}UB Cinema Guide · Ulaanbaatar cinema showtimes{% endblock %}
-{% block description %}Cinema showtimes in Ulaanbaatar for {{ meta.date }}: {{ movies | length }} films at Urgoo, Tengis, Prime Cineplex and Skywing in one daily guide.{% endblock %}
+{% block description %}Cinema showtimes in Ulaanbaatar for {{ meta.date }}: {{ movies | length - upcoming | length }} films now showing and {{ upcoming | length }} coming soon at Urgoo, Tengis, Prime Cineplex and Skywing in one daily guide.{% endblock %}
 
 {% block style %}
         .hero { position: relative; overflow: hidden; }
@@ -38,6 +38,15 @@
         .card .title { font-size: 22px; letter-spacing: .03em; margin-top: 10px; line-height: 1.05; }
         .card .meta { font-size: 11px; color: var(--muted); margin-top: 4px; font-weight: 600; }
         .empty { padding: 80px 0; text-align: center; color: var(--muted); font-weight: 600; grid-column: 1 / -1; }
+        .opens { font-size: 12px; color: var(--muted); font-weight: 600; margin-top: 8px; }
+        .opens a { color: var(--fg-2); font-weight: 700; text-decoration: none; white-space: nowrap; }
+        .opens a:hover { color: var(--fg); }
+
+        .soon-head { display: flex; justify-content: space-between; align-items: baseline; gap: 20px; flex-wrap: wrap; }
+        .soon-head h2 { font-size: 32px; line-height: 1; margin: 0; }
+        .grid.soon { flex: none; }
+        .card .when { position: absolute; left: 0; top: 10px; padding: 5px 8px; background: var(--fg); color: var(--bg); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+        .card .meta .onsale { color: var(--direct); }
 
         @media (max-width: 760px) {
             .hero-grid { grid-template-columns: 1fr; gap: 24px; padding-top: 28px; }
@@ -63,7 +72,9 @@
     <noscript>
         <div class="wrap" style="padding-top:24px">
             <p>Films now showing ({{ meta.date }}):</p>
-            <ul>{% for m in movies %}<li><a href="{{ film_href.replace('{id}', m.id) }}">{{ m.title }}</a>{% if m.genres %} · {{ m.genres | join(', ') }}{% endif %} · {{ m.cinemas | map(attribute='name') | join(', ') }}</li>{% endfor %}</ul>
+            <ul>{% for m in movies if m.id not in upcoming %}<li><a href="{{ film_href.replace('{id}', m.id) }}">{{ m.title }}</a>{% if m.genres %} · {{ m.genres | join(', ') }}{% endif %} · {{ m.cinemas | map(attribute='name') | join(', ') }}</li>{% endfor %}</ul>
+            <p>Coming soon:</p>
+            <ul>{% for m in movies | selectattr('id', 'in', upcoming) | sort(attribute='start_date') %}<li><a href="{{ film_href.replace('{id}', m.id) }}">{{ m.title }}</a> · from {{ upcoming[m.id] }} · {{ m.cinemas | map(attribute='name') | join(', ') }}</li>{% endfor %}</ul>
         </div>
     </noscript>
     <div class="hero" id="hero">
@@ -78,6 +89,12 @@
     </div>
 
     <div class="wrap grid" id="grid"></div>
+
+    <div class="wrap soon-head" id="soonHead" hidden>
+        <h2 class="oswald">Coming soon</h2>
+        <div class="count" id="soonCount"></div>
+    </div>
+    <div class="wrap grid soon" id="soon" hidden></div>
 {% endblock %}
 
 {% block extra_js %}
@@ -85,15 +102,16 @@
 const DATA = {{ movies | tojson }};
 const FILM_HREF = {{ film_href | tojson }};
 const filmHref = id => FILM_HREF.replace('{id}', encodeURIComponent(id));
+const EXTRA_DAYS = eventDates(DATA);
 const state = { sel: TODAY, spot: null, cinema: null, query: '' };
 try { const q = new URLSearchParams(location.search); if (q.get('date')) state.sel = q.get('date'); if (q.get('film')) state.spot = q.get('film'); } catch (e) {}
 
 function render(scrollToHero = false) {
-    dayStrip(document.getElementById('days'), state.sel, id => { state.sel = id; render(); });
+    dayStrip(document.getElementById('days'), state.sel, id => { state.sel = id; render(); }, null, EXTRA_DAYS);
 
     const q = state.query.trim().toLowerCase();
-    const visible = DATA.map(m => ({ m, groups: groupsFor(m, state.sel, state.cinema) }))
-        .filter(x => x.groups.length && (!q || [x.m.title, ...Object.values(x.m.titles || {}), ...(x.m.genres || [])].join(' ').toLowerCase().includes(q)));
+    const matches = m => !q || [m.title, ...Object.values(m.titles || {}), ...(m.genres || [])].join(' ').toLowerCase().includes(q);
+    const visible = DATA.map(m => ({ m, groups: groupsFor(m, state.sel, state.cinema) })).filter(x => x.groups.length && matches(x.m));
     const spot = visible.find(x => x.m.id === state.spot) || visible[0];
     if (spot) state.spot = spot.m.id;
 
@@ -106,11 +124,12 @@ function render(scrollToHero = false) {
         const m = spot.m;
         const groups = spot.groups.map(g => `<div>
             <div class="group-head"><span class="dot" style="background:${g.color}"></span>${esc(g.cinema)} <span class="branch">${esc(g.branch)}</span></div>
-            <div class="group-times">${g.times.map(s => timeChip(s)).join('')}</div></div>`).join('');
+            ${g.opens ? `<div class="opens">Opens this day · tickets not on sale yet · <a href="${esc(g.url)}" target="_blank" rel="noopener">${SITE[g.cinema] || g.cinema} ↗</a></div>`
+                : `<div class="group-times">${g.times.map(s => timeChip(s)).join('')}</div>`}</div>`).join('');
         heroGrid.innerHTML = `
             <a class="hero-poster" href="${filmHref(m.id)}">${m.poster ? `<img src="${esc(m.poster)}" alt="${esc(m.title)} poster">` : ''}</a>
             <div class="fadeup" style="min-width:0;padding-bottom:6px">
-                <div class="hero-kicker">${esc(relDay(state.sel))} · ${esc(longDay(state.sel))}</div>
+                <div class="hero-kicker">${upcomingDate(m) ? 'Coming soon · ' : ''}${esc(relDay(state.sel))} · ${esc(longDay(state.sel))}</div>
                 <a class="hero-title oswald" href="${filmHref(m.id)}">${esc(m.title)}</a>
                 <div class="hero-meta">${esc(metaLine(m))}</div>
                 <div class="hero-groups">${groups || '<div class="none">No screenings on this day.</div>'}</div>
@@ -120,7 +139,8 @@ function render(scrollToHero = false) {
 
     // filters
     const shows = visible.reduce((n, x) => n + x.groups.reduce((k, g) => k + g.times.length, 0), 0);
-    document.getElementById('count').textContent = `${visible.length} films · ${shows} screenings ${relDay(state.sel).toLowerCase()}`;
+    const unsold = visible.filter(x => x.groups.every(g => g.opens)).length;
+    document.getElementById('count').textContent = `${visible.length} films · ${shows} screenings ${relDay(state.sel).toLowerCase()}` + (unsold ? ` · ${unsold} opening, not on sale yet` : '');
     const pills = document.getElementById('pills'); pills.innerHTML = '';
     for (const c of [null, ...ORDER.filter(n => DATA.some(m => m.cinemas.some(x => x.name === n)))]) {
         const b = document.createElement('button');
@@ -138,7 +158,25 @@ function render(scrollToHero = false) {
             <div class="title oswald">${esc(m.title)}</div>
             <div class="meta">${esc(metaLine(m))}</div>
         </div>`).join('') : `<div class="empty">Nothing to show for this day.</div>`;
-    document.querySelectorAll('.card').forEach(el => el.onclick = () => { state.spot = el.dataset.id; render(true); });
+
+    // coming soon: every film that is not showing yet, soonest first; a card jumps to the film's first day
+    const shown = new Set(visible.map(x => x.m.id));
+    const soon = DATA.map(m => ({ m, date: upcomingDate(m) }))
+        .filter(x => x.date && !shown.has(x.m.id) && matches(x.m) && (!state.cinema || x.m.cinemas.some(c => c.name === state.cinema)))
+        .sort((a, b) => a.date.localeCompare(b.date) || a.m.title.localeCompare(b.m.title));
+    const onSale = soon.filter(x => x.m.showtime_count).length;
+    document.getElementById('soonHead').hidden = document.getElementById('soon').hidden = !soon.length;
+    document.getElementById('soonCount').textContent = `${soon.length} films` + (onSale ? ` · ${onSale} with tickets on sale` : '');
+    document.getElementById('soon').innerHTML = soon.map(({ m, date }) => `
+        <div class="card" data-id="${esc(m.id)}" data-date="${date}" title="${esc(longDay(date))}">
+            <div class="poster">${m.poster ? `<img src="${esc(m.poster)}" alt="${esc(m.title)} poster" loading="lazy">` : ''}
+                <div class="when">${esc(shortDay(date))}</div>
+                <div class="dots">${m.cinemas.map(c => `<span style="background:${CIN[c.name]}"></span>`).join('')}</div></div>
+            <div class="title oswald">${esc(m.title)}</div>
+            <div class="meta">${m.showtime_count ? '<span class="onsale">Tickets on sale</span>' : ''}${m.showtime_count && metaLine(m) ? ' · ' : ''}${esc(metaLine(m))}</div>
+        </div>`).join('');
+
+    document.querySelectorAll('.card').forEach(el => el.onclick = () => { if (el.dataset.date) state.sel = el.dataset.date; state.spot = el.dataset.id; render(true); });
 
     if (scrollToHero) document.getElementById('hero').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }

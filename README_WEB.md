@@ -4,12 +4,18 @@ Scrapes four Ulaanbaatar cinemas every day, merges the same film across
 cinemas into one entry, and serves a website that shows **which screen shows which
 film, at what time, with a direct booking link** wherever the cinema offers one.
 
-| Cinema | Site | Details scraped | Per-show booking link |
-|---|---|---|---|
-| Urgoo | new.urgoo.mn (urgoo.mn redirects there) | now-showing + films in the schedule, /schedule for up to 7 days | ✅ seat picker per session |
-| Tengis | www.tengis.mn | #movies grid, each film page (branch → date → times) | ❌ film page only (the site books via a modal) |
-| Prime Cineplex | www.primecineplex.mn | homepage day tabs (today + tomorrow) | ✅ ShoppingCart link per show |
-| Skywing | www.tix.mn/theaters/skywing | JSON embedded in the theater page (every scheduled session, advance sales included) + each film page for hall / sold-out; plain HTTP, no browser | ✅ /checkout/&lt;session&gt;/seats per show |
+| Cinema | Site | Details scraped | Upcoming films | Per-show booking link |
+|---|---|---|---|---|
+| Urgoo | new.urgoo.mn (urgoo.mn redirects there) | homepage cards + each movie page; the JSON embedded in /schedule holds every session on every date on sale; plain HTTP, no browser | "Тун удахгүй" (coming soon) cards with opening dates; advance sales are in the schedule, months ahead | ✅ seat picker per session |
+| Tengis | www.tengis.mn | the homepage's `__NEXT_DATA__` JSON: every film with its sessions in both theatres; plain HTTP, no browser | `preorderings` (tickets on sale, real sessions) and `upcomings` (opening date only) | ❌ film page only (the site books via a modal) |
+| Prime Cineplex | www.primecineplex.mn | homepage day tabs (today + tomorrow), server-rendered HTML; plain HTTP, no browser | /Home/Upcoming: release dates, no advance sales | ✅ ShoppingCart link per show |
+| Skywing | www.tix.mn/theaters/skywing | JSON embedded in the theater page (every scheduled session) + each film page for hall / sold-out; plain HTTP, no browser | advance sales are ordinary sessions on a future date | ✅ /checkout/&lt;session&gt;/seats per show |
+
+Upcoming films need no extra record type: an advance sale is a showtime on a future
+date, and an announced film is a record with a future `start_date` and no showtimes.
+`merge.upcoming_date()` (and its JavaScript twin `upcomingDate()` in `base.html`) decide
+whether a film is "coming soon" and on which day it arrives. Urgoo, Tengis and Vista store
+times in UTC; the scrapers convert them to Ulaanbaatar time (UTC+8).
 
 ## Files
 
@@ -37,9 +43,9 @@ list of `showtimes`, each with `date`, `branch`, `hall`, `time`, `format`, `url`
 ## Running
 
 ```bash
-pip install -r requirements.txt          # needs Chrome installed for Selenium
+pip install -r requirements.txt          # no browser needed: every site is read over plain HTTP
 
-python scraper_ultimate.py               # scrape everything (3–4 minutes), write output/latest.json
+python scraper_ultimate.py               # scrape everything (under a minute), write output/latest.json
 python scraper_ultimate.py --notify      # ...and email watchlist matches (MY_EMAIL / MY_PASSWORD env vars)
 python urgoo.py out.json                 # run one scraper on its own and dump its raw records
 
@@ -57,7 +63,7 @@ The website's **Refresh Data** button runs the same pipeline in the background.
 ## Free hosting on GitHub Pages
 
 No server, database or login is needed: `.github/workflows/scrape.yml` scrapes the
-cinemas on GitHub's runners once a day at 09:00 Ulaanbaatar time,
+cinemas on GitHub's runners once a day at 05:00 Ulaanbaatar time,
 builds a static page with `build_static.py`, and deploys it to GitHub Pages.
 Scraped data is uploaded as a deployment artifact and is never committed, so the
 repository stays free of listings, the watchlist and anything personal
@@ -103,7 +109,15 @@ The UI follows the "Spotlight" direction from the Claude Design project
 - **Home** (`templates/index.html`): a day strip in the top bar, a spotlight on one
   film (poster, title, cinema → branch → time chips for the chosen day), a cinema
   filter, search, and a poster grid. Clicking a poster moves the spotlight; the title
-  or "Full details" opens the film page.
+  or "Full details" opens the film page. Below the grid a **Coming soon** section shows
+  every film that is not showing yet, soonest first, with its date on the poster;
+  clicking one jumps to that day.
+- **Day strip**: three past days to six days ahead, then, after a divider, only the
+  later dates that have something on (advance screenings or openings), each labelled
+  with its month. It scrolls sideways with no visible scrollbar (touch, trackpad, or a
+  plain mouse wheel while hovering) and fades at the edge where more days are hidden.
+  On a day a cinema opens a film without selling tickets yet, the film shows
+  "Opens this day · tickets not on sale yet" instead of time chips.
 - **Film page** (`templates/film.html`, `/film/<id>` or `site/film/<id>.html`): hero
   with poster and format/rating/duration chips, facts (genre, running time, rating,
   release date, how each cinema lists the title), synopsis, a day strip with cinema
@@ -120,4 +134,4 @@ The UI follows the "Spotlight" direction from the Claude Design project
 | `/api/scrape` | POST | Start a scrape in the background |
 | `/api/scrape/status` | GET | Scrape progress |
 | `/api/watchlist` | GET/POST/DELETE | Manage the watchlist (`{"movie": "..."}`) |
-| `/api/watchlist/check` | GET | Watchlist films that are showing now |
+| `/api/watchlist/check` | GET | Watchlist films that are showing now or announced |

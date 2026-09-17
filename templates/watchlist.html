@@ -45,7 +45,7 @@
         <div class="label" style="font-size:12px;color:var(--muted);font-weight:700">Now playing from your watchlist</div>
         {% for match in matches %}{% set movie = match.movie %}
         <div class="match">
-            <div class="tag">NOW PLAYING · {{ match.similarity }}% MATCH FOR "{{ match.watchlist_name | upper }}"</div>
+            <div class="tag">{% if movie.id in upcoming %}COMING {{ upcoming[movie.id] }}{% else %}NOW PLAYING{% endif %} · {{ match.similarity }}% MATCH FOR "{{ match.watchlist_name | upper }}"</div>
             <a class="t2 oswald" style="display:block;text-decoration:none" href="/film/{{ movie.id }}">{{ movie.title }}</a>
             <div class="where">
                 {% for cinema in movie.cinemas %}<span><span class="dot" style="background:var(--{{ {'Urgoo':'urgoo','Tengis':'tengis','Prime Cineplex':'prime','Skywing':'skywing'}.get(cinema.name, 'fg') }});margin-right:6px"></span>{{ cinema.name }}: {{ cinema.showtimes | map(attribute='branch') | unique | join(', ') or 'no screenings listed' }} <a href="{{ cinema.url }}" target="_blank">↗</a></span>{% endfor %}
@@ -68,10 +68,10 @@
 
     {% if currently_showing %}
     <div class="section">
-        <div style="font-size:12px;color:var(--muted);font-weight:700">Quick add from now showing</div>
+        <div style="font-size:12px;color:var(--muted);font-weight:700">Quick add from now showing and coming soon</div>
         <div class="list">
             {% for movie in currently_showing %}
-            <div class="item" data-movie="{{ movie.title }}"><a class="name oswald" href="/film/{{ movie.id }}">{{ movie.title }}</a><span class="sub">{{ movie.cinemas | map(attribute='name') | join(' · ') }}</span><button onclick="quickAdd(this.parentNode.dataset.movie)">+ ADD</button></div>
+            <div class="item" data-movie="{{ movie.title }}"><a class="name oswald" href="/film/{{ movie.id }}">{{ movie.title }}</a><span class="sub">{% if movie.id in upcoming %}from {{ upcoming[movie.id] }} · {% endif %}{{ movie.cinemas | map(attribute='name') | join(' · ') }}</span><button onclick="quickAdd(this.parentNode.dataset.movie)">+ ADD</button></div>
             {% endfor %}
         </div>
     </div>

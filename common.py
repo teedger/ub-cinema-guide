@@ -18,14 +18,20 @@ merge.py can combine them regardless of which cinema they came from:
         "start_date": "2026-09-09",
         "showtimes": [showtime(...), ...],
     }
+
+Films that are not showing yet use the same shape: advance sales are ordinary
+showtimes on a future date, and a film that is only announced has a future
+`start_date` and no showtimes.
 """
 
 import datetime
+import gzip
+import http.client
+import json
 import os
 import re
-
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
+import time
+import urllib.request
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = os.path.join(BASE_DIR, "output")
@@ -34,21 +40,80 @@ FILES_DIR = os.path.join(BASE_DIR, "files")
 USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36")
 
+UB_TZ = datetime.timezone(datetime.timedelta(hours=8))  # Ulaanbaatar, no daylight saving
+FLIGHT_CHUNK = re.compile(r"self\.__next_f\.push\((\[.*?\])\)</script>", re.S)
+NEXT_DATA = re.compile(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', re.S)
 
-def make_driver():
-    """Headless Chrome with the same options every scraper used before."""
-    options = Options()
-    options.add_argument(f"user-agent={USER_AGENT}")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument("--headless=new")
-    options.add_argument("--window-size=1400,1000")
-    if os.getenv("CI"):  # GitHub Actions runners: no sandbox user, tiny /dev/shm
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-gpu")
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option("useAutomationExtension", False)
-    return webdriver.Chrome(options=options)
+
+def fetch_html(url):
+    """Download a page over plain HTTP, for the sites that render on the server."""
+    # gzip matters: the pages are up to 1 MB of mostly repeated markup and the servers are far away.
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept-Language": "mn,en;q=0.8",
+                                                   "Accept-Encoding": "gzip"})
+    for attempt in (1, 2, 3):  # pages occasionally time out or arrive cut short
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                body = response.read()
+                if response.headers.get("Content-Encoding") == "gzip":
+                    body = gzip.decompress(body)
+                return body.decode("utf-8", errors="replace")
+        except (OSError, http.client.HTTPException):
+            if attempt == 3:
+                raise
+            time.sleep(attempt)
+
+
+def flight_payload(html):
+    """The Next.js app-router flight payload (self.__next_f.push(...)) as one string."""
+    parts = []
+    for chunk in FLIGHT_CHUNK.findall(html):
+        try:
+            item = json.loads(chunk)
+        except ValueError:
+            continue
+        if len(item) > 1 and isinstance(item[1], str):
+            parts.append(item[1])
+    return "".join(parts)
+
+
+def next_data(html):
+    """The Next.js pages-router __NEXT_DATA__ JSON, or {} when the page has none."""
+    match = NEXT_DATA.search(html)
+    return json.loads(match.group(1)) if match else {}
+
+
+def json_after(payload, marker, accept=lambda value: True):
+    """Decode the JSON value that follows `marker`, trying each occurrence until
+    one satisfies `accept`. Returns None when nothing fits."""
+    decoder = json.JSONDecoder()
+    for match in re.finditer(re.escape(marker), payload):
+        try:
+            value, _ = decoder.raw_decode(payload, match.end())
+        except ValueError:
+            continue
+        if accept(value):
+            return value
+    return None
+
+
+def local_datetime(value):
+    """'2026-09-18T14:00:00.000Z' (UTC, as the Vista-backed sites store it) -> naive
+    Ulaanbaatar datetime, or None. Flight payloads prefix dates with '$D'."""
+    text = clean_text(value).removeprefix("$D")
+    try:
+        moment = datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if moment.tzinfo is None:
+        return moment
+    return moment.astimezone(UB_TZ).replace(tzinfo=None)
+
+
+def duration_text(minutes):
+    if not minutes:
+        return ""
+    hours, mins = divmod(int(minutes), 60)
+    return f"{hours} цаг {mins} мин" if hours else f"{mins} мин"
 
 
 def new_movie(cinema, source_id, title, url, poster="", description="", genres=None,
@@ -118,12 +183,3 @@ def parse_duration_minutes(text):
         return None
     return int(hours.group(1) if hours else 0) * 60 + int(minutes.group(1) if minutes else 0)
 
-
-def date_from_month_day(month, day, today=None):
-    """Turn a 'month/day' pair with no year (as Urgoo's date buttons show) into a
-    date, assuming it is the nearest such date on or after roughly today."""
-    today = today or datetime.date.today()
-    year = today.year
-    if month < today.month - 1:  # e.g. January buttons seen in December
-        year += 1
-    return datetime.date(year, month, day)

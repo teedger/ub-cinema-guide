@@ -82,7 +82,8 @@ def send_email(subject, body):
 def notify_matches(movies):
     """Email watchlist hits and drop them from the watchlist. Returns the matches."""
     names = load_watchlist()
-    matches = find_matches(movies, names)
+    # Only films with screenings (advance sales count): an announced title stays on the list until it can be booked.
+    matches = find_matches([m for m in movies if m.get("showtime_count")], names)
     if not matches:
         print("There are no matched movies screening in theaters today.")
         return []

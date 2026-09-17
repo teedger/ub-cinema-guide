@@ -1,4 +1,6 @@
 {
   "_comment": "Map a cinema's title to the title used elsewhere when fuzzy matching can't tell they are the same film. Keys and values are matched case-insensitively.",
-  "Тосгон МУСК": "Тосгон"
+  "Тосгон МУСК": "Тосгон",
+  "Journey to Geong-ju": "The Journey to Gyeong-ju",
+  "Bluelock Movie": "Blue Lock"
 }
