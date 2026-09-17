@@ -5,7 +5,7 @@ Every scraper returns a list of *movie records* in one common shape so that
 merge.py can combine them regardless of which cinema they came from:
 
     {
-        "cinema": "Urgoo",                     # Urgoo | Tengis | Prime Cineplex
+        "cinema": "Urgoo",                     # Urgoo | Tengis | Prime Cineplex | Skywing
         "source_id": "HO00001936",             # the cinema's own movie id
         "title": "Hope",
         "url": "https://new.urgoo.mn/movies/HO00001936",   # movie page
@@ -95,7 +95,7 @@ def today_iso():
 
 
 def normalize_date(value):
-    """Return YYYY-MM-DD for the date formats the three sites use, else the raw text."""
+    """Return YYYY-MM-DD for the date formats the cinema sites use, else the raw text."""
     text = clean_text(value)
     if not text:
         return ""

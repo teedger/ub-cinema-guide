@@ -1,7 +1,7 @@
 {
   "name": "UB Cinema Guide",
   "short_name": "UB Cinema",
-  "description": "Daily cinema showtimes for Ulaanbaatar: Urgoo, Tengis and Prime Cineplex in one guide.",
+  "description": "Daily cinema showtimes for Ulaanbaatar: Urgoo, Tengis, Prime Cineplex and Skywing in one guide.",
   "start_url": "../",
   "scope": "../",
   "display": "standalone",

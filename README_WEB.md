@@ -1,6 +1,6 @@
 # UB Cinema Guide
 
-Scrapes the three Ulaanbaatar cinema chains every day, merges the same film across
+Scrapes four Ulaanbaatar cinemas every day, merges the same film across
 cinemas into one entry, and serves a website that shows **which screen shows which
 film, at what time, with a direct booking link** wherever the cinema offers one.
 
@@ -9,6 +9,7 @@ film, at what time, with a direct booking link** wherever the cinema offers one.
 | Urgoo | new.urgoo.mn (urgoo.mn redirects there) | now-showing + films in the schedule, /schedule for up to 7 days | ✅ seat picker per session |
 | Tengis | www.tengis.mn | #movies grid, each film page (branch → date → times) | ❌ film page only (the site books via a modal) |
 | Prime Cineplex | www.primecineplex.mn | homepage day tabs (today + tomorrow) | ✅ ShoppingCart link per show |
+| Skywing | www.tix.mn/theaters/skywing | JSON embedded in the theater page (every scheduled session, advance sales included) + each film page for hall / sold-out; plain HTTP, no browser | ✅ /checkout/&lt;session&gt;/seats per show |
 
 ## Files
 
@@ -17,6 +18,7 @@ common.py            shared helpers + the common movie/showtime record shape
 urgoo.py             Urgoo scraper        -> urgoo.scrape()
 tengis.py            Tengis scraper       -> tengis.scrape()
 primecineplex.py     Prime scraper        -> primecineplex.scrape()
+tix.py               Skywing scraper (tix.mn platform) -> tix.scrape()
 merge.py             title normalisation + fuzzy matching, one entry per film
 watchlist.py         files/my_movies.txt matching + email notification
 scraper_ultimate.py  runs all scrapers (in parallel), merges, writes output/latest.json

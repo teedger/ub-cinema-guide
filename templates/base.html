@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}UB Cinema Guide{% endblock %}</title>
-    <meta name="description" content="{% block description %}Today's cinema showtimes in Ulaanbaatar. Urgoo, Tengis and Prime Cineplex listings merged into one guide, updated every morning.{% endblock %}">
+    <meta name="description" content="{% block description %}Today's cinema showtimes in Ulaanbaatar. Urgoo, Tengis, Prime Cineplex and Skywing listings merged into one guide, updated every morning.{% endblock %}">
     {% if canonical_url %}<link rel="canonical" href="{{ canonical_url }}">{% endif %}
     <meta name="robots" content="index, follow, max-image-preview:large">
     <meta name="theme-color" content="#0e0e0e">
@@ -38,7 +38,7 @@
         :root {
             --bg: #0e0e0e; --fg: #f5f5f0; --fg-2: #c9c9c2; --muted: #8c8c85; --faint: #5c5c57;
             --line: #1f1f1d; --line-2: #262624; --line-3: #3a3a37;
-            --urgoo: #3b82f6; --tengis: #ef4444; --prime: #f59e0b; --direct: #4ade80;
+            --urgoo: #3b82f6; --tengis: #ef4444; --prime: #f59e0b; --skywing: #a855f7; --direct: #4ade80;
         }
         * { box-sizing: border-box; }
         body { margin: 0; background: var(--bg); color: var(--fg); font-family: 'Manrope', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
@@ -81,7 +81,7 @@
 
         /* cinema colours */
         .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none; }
-        .c-urgoo { background: var(--urgoo); } .c-tengis { background: var(--tengis); } .c-prime { background: var(--prime); }
+        .c-urgoo { background: var(--urgoo); } .c-tengis { background: var(--tengis); } .c-prime { background: var(--prime); } .c-skywing { background: var(--skywing); }
 
         /* pills */
         .pill { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; cursor: pointer; background: transparent; color: var(--muted); border: 1px solid var(--line-3); font-family: inherit; white-space: nowrap; text-decoration: none; }
@@ -131,7 +131,7 @@
 
     <div class="footer">
         <div class="wrap">
-            <span>Listings scraped daily from <a href="https://new.urgoo.mn">urgoo.mn</a>, <a href="https://www.tengis.mn">tengis.mn</a> and <a href="https://www.primecineplex.mn">primecineplex.mn</a>{% if meta and meta.scraped_at %} · last update {{ meta.scraped_at }} Ulaanbaatar time{% endif %} · confirm times on the cinema's site before travelling.</span>
+            <span>Listings scraped daily from <a href="https://new.urgoo.mn">urgoo.mn</a>, <a href="https://www.tengis.mn">tengis.mn</a>, <a href="https://www.primecineplex.mn">primecineplex.mn</a> and <a href="https://www.tix.mn/theaters/skywing">tix.mn (Skywing)</a>{% if meta and meta.scraped_at %} · last update {{ meta.scraped_at }} Ulaanbaatar time{% endif %} · confirm times on the cinema's site before travelling.</span>
             <span class="by">Created by <a href="https://github.com/teedger">@teedger</a></span>
         </div>
     </div>
@@ -144,10 +144,10 @@
         toast.className = `toast ${type} show`;
         setTimeout(() => toast.classList.remove('show'), 3000);
     }
-    const CIN = { 'Urgoo': '#3b82f6', 'Tengis': '#ef4444', 'Prime Cineplex': '#f59e0b' };
-    const CLS = { 'Urgoo': 'c-urgoo', 'Tengis': 'c-tengis', 'Prime Cineplex': 'c-prime' };
-    const SITE = { 'Urgoo': 'urgoo.mn', 'Tengis': 'tengis.mn', 'Prime Cineplex': 'primecineplex.mn' };
-    const ORDER = ['Urgoo', 'Tengis', 'Prime Cineplex'];
+    const CIN = { 'Urgoo': '#3b82f6', 'Tengis': '#ef4444', 'Prime Cineplex': '#f59e0b', 'Skywing': '#a855f7' };
+    const CLS = { 'Urgoo': 'c-urgoo', 'Tengis': 'c-tengis', 'Prime Cineplex': 'c-prime', 'Skywing': 'c-skywing' };
+    const SITE = { 'Urgoo': 'urgoo.mn', 'Tengis': 'tengis.mn', 'Prime Cineplex': 'primecineplex.mn', 'Skywing': 'tix.mn' };
+    const ORDER = ['Urgoo', 'Tengis', 'Prime Cineplex', 'Skywing'];
     const isoDate = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const TODAY0 = new Date(); TODAY0.setHours(0, 0, 0, 0);
     const TODAY = isoDate(TODAY0);
@@ -156,7 +156,7 @@
     const relDay = iso => { const d = dayOff(iso); return d === 0 ? 'Today' : d === 1 ? 'Tomorrow' : d < 0 ? `${-d} days ago` : `In ${d} days`; };
     const longDay = iso => new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
     const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-    const isDirect = url => /sessions|ShoppingCart/.test(url || '');
+    const isDirect = url => /sessions|ShoppingCart|\/checkout\//.test(url || '');
     const fmtDuration = m => m ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : '';
     const formatsOf = movie => [...new Set(movie.cinemas.flatMap(c => c.showtimes.map(s => s.format)).filter(Boolean))];
     function metaLine(movie) {

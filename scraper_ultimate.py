@@ -18,6 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import primecineplex
 import tengis
+import tix
 import urgoo
 import watchlist
 from common import OUTPUT_DIR
@@ -27,6 +28,7 @@ SCRAPERS = {
     "Urgoo": urgoo.scrape,
     "Tengis": tengis.scrape,
     "Prime Cineplex": primecineplex.scrape,
+    "Skywing": tix.scrape,
 }
 LATEST_FILE = os.path.join(OUTPUT_DIR, "latest.json")
 

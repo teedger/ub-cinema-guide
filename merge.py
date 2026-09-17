@@ -24,7 +24,7 @@ ALIASES_FILE = os.path.join(FILES_DIR, "title_aliases.json")
 FORMAT_TOKENS = {"imax", "2d", "3d", "4dx", "vip", "laser", "dolby", "atmos", "муск", "mn", "eng"}
 FORMAT_LABELS = {"imax": "IMAX", "3d": "3D", "4dx": "4DX"}
 
-CINEMA_PRIORITY = ["Urgoo", "Tengis", "Prime Cineplex"]
+CINEMA_PRIORITY = ["Urgoo", "Tengis", "Prime Cineplex", "Skywing"]
 MATCH_THRESHOLD = 90
 
 

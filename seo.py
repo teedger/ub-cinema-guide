@@ -9,11 +9,12 @@ from urllib.parse import quote
 
 SITE_URL = "https://ubcinema.info"
 SITE_NAME = "UB Cinema Guide"
-SITE_DESCRIPTION = ("Today's cinema showtimes in Ulaanbaatar. Urgoo, Tengis and Prime Cineplex "
+SITE_DESCRIPTION = ("Today's cinema showtimes in Ulaanbaatar. Urgoo, Tengis, Prime Cineplex and Skywing "
                     "listings merged into one guide, updated every morning.")
 TZ_OFFSET = "+08:00"  # Ulaanbaatar, no daylight saving
 
-CINEMA_SITES = {"Urgoo": "https://new.urgoo.mn", "Tengis": "https://www.tengis.mn", "Prime Cineplex": "https://www.primecineplex.mn"}
+CINEMA_SITES = {"Urgoo": "https://new.urgoo.mn", "Tengis": "https://www.tengis.mn", "Prime Cineplex": "https://www.primecineplex.mn",
+                "Skywing": "https://www.tix.mn/theaters/skywing"}
 
 
 def film_url(movie_id, site_url=SITE_URL):

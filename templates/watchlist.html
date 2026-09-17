@@ -48,7 +48,7 @@
             <div class="tag">NOW PLAYING · {{ match.similarity }}% MATCH FOR "{{ match.watchlist_name | upper }}"</div>
             <a class="t2 oswald" style="display:block;text-decoration:none" href="/film/{{ movie.id }}">{{ movie.title }}</a>
             <div class="where">
-                {% for cinema in movie.cinemas %}<span><span class="dot" style="background:var(--{{ {'Urgoo':'urgoo','Tengis':'tengis','Prime Cineplex':'prime'}.get(cinema.name, 'fg') }});margin-right:6px"></span>{{ cinema.name }}: {{ cinema.showtimes | map(attribute='branch') | unique | join(', ') or 'no screenings listed' }} <a href="{{ cinema.url }}" target="_blank">↗</a></span>{% endfor %}
+                {% for cinema in movie.cinemas %}<span><span class="dot" style="background:var(--{{ {'Urgoo':'urgoo','Tengis':'tengis','Prime Cineplex':'prime','Skywing':'skywing'}.get(cinema.name, 'fg') }});margin-right:6px"></span>{{ cinema.name }}: {{ cinema.showtimes | map(attribute='branch') | unique | join(', ') or 'no screenings listed' }} <a href="{{ cinema.url }}" target="_blank">↗</a></span>{% endfor %}
             </div>
         </div>
         {% endfor %}
