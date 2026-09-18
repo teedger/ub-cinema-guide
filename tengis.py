@@ -15,12 +15,15 @@ Tengis has no per-screening booking link, so showtimes link to the film page.
 """
 
 import json
+import re
 import sys
 
 from common import duration_text, fetch_html, local_datetime, new_movie, next_data, showtime
 
 CINEMA = "Tengis"
 BASE_URL = "https://www.tengis.mn"
+# Listed like a film but not one: "Танхим түрээс" is the hall-rental service.
+NOT_A_FILM = re.compile(r"түрээс", re.IGNORECASE)
 
 
 def absolute(href):
@@ -38,6 +41,13 @@ def page_repo(url):
     if not repo:
         raise RuntimeError(f"Tengis: no page data found on {url}")
     return repo
+
+
+def is_film(film):
+    if NOT_A_FILM.search(film.get("title") or ""):
+        print(f"Tengis: skipping non-film listing '{film['title']}'")
+        return False
+    return True
 
 
 def film_record(film):
@@ -86,10 +96,14 @@ def scrape():
 
     for day in repo.get("ongoings") or []:
         for film in day.get("movies") or []:
+            if not is_film(film):
+                continue
             movie = movies.setdefault(film["slug"], film_record(film))
             add_sessions(movie, [(session, theatre.get("title", ""))
                                  for theatre in film.get("theatres") or [] for session in theatre.get("sessions") or []])
     for film in (repo.get("preorderings") or []) + (repo.get("upcomings") or []):
+        if not is_film(film):
+            continue
         movie = movies.setdefault(film["slug"], film_record(film))
         if film.get("type") == "PREORDERING" and not movie["showtimes"]:
             # On sale but not under any homepage tab: the film page has the sessions.
