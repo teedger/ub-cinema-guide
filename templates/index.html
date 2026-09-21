@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}UB Cinema Guide · Ulaanbaatar cinema showtimes{% endblock %}
-{% block description %}Cinema showtimes in Ulaanbaatar for {{ meta.date }}: {{ movies | length - upcoming | length }} films now showing and {{ upcoming | length }} coming soon at Urgoo, Tengis, Prime Cineplex and Skywing in one daily guide.{% endblock %}
+{% block description %}Cinema showtimes in Ulaanbaatar for {{ meta.date }}: {{ movies | length - upcoming | length }} films now showing and {{ upcoming | length }} coming soon at Urgoo, Tengis, Prime Cineplex, Skywing and CinemaNext in one daily guide.{% endblock %}
 
 {% block style %}
         .hero { position: relative; overflow: hidden; }
@@ -68,7 +68,7 @@
 {% endblock %}
 
 {% block content %}
-    <h1 class="sr-only">Cinema showtimes in Ulaanbaatar: Urgoo, Tengis, Prime Cineplex and Skywing</h1>
+    <h1 class="sr-only">Cinema showtimes in Ulaanbaatar: Urgoo, Tengis, Prime Cineplex, Skywing and CinemaNext</h1>
     <noscript>
         <div class="wrap" style="padding-top:24px">
             <p>Films now showing ({{ meta.date }}):</p>

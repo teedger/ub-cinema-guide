@@ -36,7 +36,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Scrape all cinemas
-        # Plain HTTP against the four cinema sites: no browser needed.
+        # Plain HTTP against the cinema sites: no browser needed.
         run: python scraper_ultimate.py
 
       - name: Build the static site

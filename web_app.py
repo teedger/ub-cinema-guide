@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Cinema guide web app: one page listing every film showing in Ulaanbaatar's
-cinemas (Urgoo, Tengis, Prime Cineplex, Skywing) with screens, times and booking links.
+cinemas (Urgoo, Tengis, Prime Cineplex, Skywing, CinemaNext) with screens, times and booking links.
 
 Data comes from output/latest.json, written by scraper_ultimate.py. The
 "Refresh" button runs the scrapers in a background thread.

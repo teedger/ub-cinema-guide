@@ -28,7 +28,8 @@ SCRAPERS = {
     "Urgoo": urgoo.scrape,
     "Tengis": tengis.scrape,
     "Prime Cineplex": primecineplex.scrape,
-    "Skywing": tix.scrape,
+    "Skywing": tix.scrape_skywing,
+    "CinemaNext": tix.scrape_cinemanext,
 }
 LATEST_FILE = os.path.join(OUTPUT_DIR, "latest.json")
 

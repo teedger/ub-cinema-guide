@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""Skywing cinema scraper (www.tix.mn/theaters/skywing, Next.js).
+"""tix.mn cinema scraper (Skywing and CinemaNext, Next.js).
 
-Skywing sells its tickets through the tix.mn platform. The pages are server
-rendered and carry their data as JSON inside the Next.js flight payload
-(self.__next_f.push(...)), so plain HTTP is enough: no browser needed.
+Both cinemas sell their tickets through the tix.mn platform, so one scraper
+serves them. The pages are server rendered and carry their data as JSON inside
+the Next.js flight payload (self.__next_f.push(...)), so plain HTTP is enough:
+no browser needed.
 
-The theater page lists every film with all of its scheduled sessions, advance
+A theater page lists every film with all of its scheduled sessions, advance
 sales included. Each film page adds the hall name and sold-out flag per session.
 Every session has a direct seat-picker link: /checkout/<session id>/seats.
 
-tix.mn hosts other theaters too (CinemaNext, United Cinema); scrape_theater()
-works for any of them given the theater's slug.
+tix.mn hosts other theaters too; add one to CINEMAS and it is scraped like the
+rest, given its slug from the /theaters/<slug> URL.
 """
 
 import json
@@ -18,10 +19,14 @@ import sys
 
 from common import duration_text, fetch_html, flight_payload, json_after, new_movie, showtime
 
-CINEMA = "Skywing"
 BASE_URL = "https://www.tix.mn"
-THEATER_SLUG = "skywing"
-BRANCH = "Зайсан"  # single location, north-east of Zaisan hill
+
+# display name -> (theater slug, branch label). Both cinemas have a single location,
+# so the branch names the neighbourhood the way the other scrapers' branches do.
+CINEMAS = {
+    "Skywing": ("skywing", "Зайсан"),            # north-east of Zaisan hill
+    "CinemaNext": ("cinema_next", "16-р хороолол"),  # Bayanzurkh district, 16th micro-district
+}
 
 
 def fetch_flight(url):
@@ -50,7 +55,9 @@ def plain(text):
     return "" if str(text or "").startswith("$") else text or ""
 
 
-def scrape_theater(slug=THEATER_SLUG, cinema=CINEMA, branch=BRANCH):
+def scrape_theater(cinema):
+    """Every film and screening at one tix.mn theater, as website movie records."""
+    slug, branch = CINEMAS[cinema]
     data = theater_data(slug)
     cinema_id = data["cinema"]["id"]
     # Advance sales are normally part of "movies" already; keep any that are not.
@@ -79,7 +86,7 @@ def scrape_theater(slug=THEATER_SLUG, cinema=CINEMA, branch=BRANCH):
             hall = extra.get("screen_name") or ""
             movie["showtimes"].append(showtime(
                 start[:10], branch, start[11:16], end_time=end[11:16],
-                hall="" if hall.lower() == cinema.lower() else hall,  # the only hall is called "SkyWing"
+                hall="" if hall.lower() == cinema.lower() else hall,  # Skywing's only hall is called "SkyWing"
                 fmt=" ".join(tag["name"] for tag in session.get("tags") or [] if tag.get("name")),
                 url=f"{BASE_URL}/checkout/{session['id']}/seats",
                 available=not extra.get("soldout_status"),
@@ -89,14 +96,18 @@ def scrape_theater(slug=THEATER_SLUG, cinema=CINEMA, branch=BRANCH):
     return movies
 
 
-def scrape():
-    return scrape_theater()
+def scrape_skywing():
+    return scrape_theater("Skywing")
+
+
+def scrape_cinemanext():
+    return scrape_theater("CinemaNext")
 
 
 if __name__ == "__main__":
-    result = scrape()
+    result = [m for cinema in CINEMAS for m in scrape_theater(cinema)]
     for m in result:
-        print(f"- {m['title']} | {m['rating']} | {m['duration']} | {len(m['showtimes'])} screenings")
+        print(f"- {m['cinema']}: {m['title']} | {m['rating']} | {m['duration']} | {len(m['showtimes'])} screenings")
     if len(sys.argv) > 1:
         with open(sys.argv[1], "w", encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False, indent=2)

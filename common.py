@@ -5,7 +5,7 @@ Every scraper returns a list of *movie records* in one common shape so that
 merge.py can combine them regardless of which cinema they came from:
 
     {
-        "cinema": "Urgoo",                     # Urgoo | Tengis | Prime Cineplex | Skywing
+        "cinema": "Urgoo",                     # Urgoo | Tengis | Prime Cineplex | Skywing | CinemaNext
         "source_id": "HO00001936",             # the cinema's own movie id
         "title": "Hope",
         "url": "https://new.urgoo.mn/movies/HO00001936",   # movie page

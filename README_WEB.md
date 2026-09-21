@@ -1,6 +1,6 @@
 # UB Cinema Guide
 
-Scrapes four Ulaanbaatar cinemas every day, merges the same film across
+Scrapes five Ulaanbaatar cinemas every day, merges the same film across
 cinemas into one entry, and serves a website that shows **which screen shows which
 film, at what time, with a direct booking link** wherever the cinema offers one.
 
@@ -10,6 +10,7 @@ film, at what time, with a direct booking link** wherever the cinema offers one.
 | Tengis | www.tengis.mn | the homepage's `__NEXT_DATA__` JSON: every film with its sessions in both theatres; plain HTTP, no browser | `preorderings` (tickets on sale, real sessions) and `upcomings` (opening date only) | ❌ film page only (the site books via a modal) |
 | Prime Cineplex | www.primecineplex.mn | homepage day tabs (today + tomorrow), server-rendered HTML; plain HTTP, no browser | /Home/Upcoming: release dates, no advance sales | ✅ ShoppingCart link per show |
 | Skywing | www.tix.mn/theaters/skywing | JSON embedded in the theater page (every scheduled session) + each film page for hall / sold-out; plain HTTP, no browser | advance sales are ordinary sessions on a future date | ✅ /checkout/&lt;session&gt;/seats per show |
+| CinemaNext | www.tix.mn/theaters/cinema_next | same tix.mn platform as Skywing, same scraper | advance sales are ordinary sessions on a future date | ✅ /checkout/&lt;session&gt;/seats per show |
 
 Upcoming films need no extra record type: an advance sale is a showtime on a future
 date, and an announced film is a record with a future `start_date` and no showtimes.
@@ -24,7 +25,7 @@ common.py            shared helpers + the common movie/showtime record shape
 urgoo.py             Urgoo scraper        -> urgoo.scrape()
 tengis.py            Tengis scraper       -> tengis.scrape()
 primecineplex.py     Prime scraper        -> primecineplex.scrape()
-tix.py               Skywing scraper (tix.mn platform) -> tix.scrape()
+tix.py               tix.mn platform: Skywing and CinemaNext -> tix.scrape_skywing() / tix.scrape_cinemanext()
 merge.py             title normalisation + fuzzy matching, one entry per film
 watchlist.py         files/my_movies.txt matching + email notification
 scraper_ultimate.py  runs all scrapers (in parallel), merges, writes output/latest.json
