@@ -100,6 +100,8 @@
 {% block extra_js %}
 <script>
 const DATA = {{ movies | tojson }};
+// TEST: random order on every page load instead of alphabetical (Fisher-Yates shuffle).
+for (let i = DATA.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [DATA[i], DATA[j]] = [DATA[j], DATA[i]]; }
 const FILM_HREF = {{ film_href | tojson }};
 const filmHref = id => FILM_HREF.replace('{id}', encodeURIComponent(id));
 const EXTRA_DAYS = eventDates(DATA);
