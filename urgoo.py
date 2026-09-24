@@ -21,7 +21,7 @@ import time
 
 from bs4 import BeautifulSoup
 
-from common import clean_text, fetch_html, flight_payload, json_after, local_datetime, new_movie, showtime
+from common import clean_text, fetch_complete, fetch_html, flight_payload, json_after, local_datetime, new_movie, showtime
 
 CINEMA = "Urgoo"
 BASE_URL = "https://new.urgoo.mn"
@@ -38,7 +38,8 @@ def absolute(href):
 
 def movie_extract():
     """Return [{source_id, title, url, poster}] for the now-showing and coming-soon cards."""
-    soup = BeautifulSoup(fetch_html(BASE_URL + "/"), "html.parser")
+    html = fetch_complete(BASE_URL + "/", lambda h: all(f'id="{section_id}"' in h for section_id in SECTION_IDS), CINEMA)
+    soup = BeautifulSoup(html, "html.parser")
     movies, seen = [], set()
     for section_id in SECTION_IDS:
         section = soup.find(id=section_id)
@@ -128,8 +129,11 @@ def movie_info(links):
 
 def scrape_schedule():
     """Return ({movie_id: [showtime, ...]}, {movie_id: link}) for every date on /schedule."""
-    films = json_after(flight_payload(fetch_html(BASE_URL + "/schedule")), '"films":',
-                       lambda v: isinstance(v, list) and all(isinstance(f, dict) and "showtimes" in f for f in v))
+    def film_list(html):
+        return json_after(flight_payload(html), '"films":',
+                          lambda v: isinstance(v, list) and all(isinstance(f, dict) and "showtimes" in f for f in v))
+
+    films = film_list(fetch_complete(BASE_URL + "/schedule", lambda html: film_list(html) is not None, CINEMA))
     if films is None:
         raise RuntimeError("Urgoo: no film list found on /schedule")
     today = datetime.date.today()

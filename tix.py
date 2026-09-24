@@ -17,7 +17,7 @@ rest, given its slug from the /theaters/<slug> URL.
 import json
 import sys
 
-from common import duration_text, fetch_html, flight_payload, json_after, new_movie, showtime
+from common import duration_text, fetch_complete, fetch_html, flight_payload, json_after, new_movie, showtime
 
 BASE_URL = "https://www.tix.mn"
 
@@ -36,8 +36,11 @@ def fetch_flight(url):
 
 def theater_data(slug):
     """{"cinema": {...}, "movies": [{..., "sessions": [...]}, ...]} from the theater page."""
-    payload = fetch_flight(f"{BASE_URL}/theaters/{slug}")
-    data = json_after(payload, '"data":', lambda v: isinstance(v, dict) and "cinema" in v and "movies" in v)
+    def film_data(html):
+        return json_after(flight_payload(html), '"data":', lambda v: isinstance(v, dict) and "cinema" in v and "movies" in v)
+
+    url = f"{BASE_URL}/theaters/{slug}"
+    data = film_data(fetch_complete(url, lambda html: film_data(html) is not None, f"tix.mn {slug}"))
     if data is None:
         raise RuntimeError(f"tix.mn: no film data found on /theaters/{slug}")
     return data

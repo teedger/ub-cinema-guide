@@ -40,6 +40,9 @@ FILES_DIR = os.path.join(BASE_DIR, "files")
 USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36")
 
+# Seconds to wait before each retry of a page that came back without its data.
+RETRY_WAITS = (15, 60, 120)
+
 UB_TZ = datetime.timezone(datetime.timedelta(hours=8))  # Ulaanbaatar, no daylight saving
 FLIGHT_CHUNK = re.compile(r"self\.__next_f\.push\((\[.*?\])\)</script>", re.S)
 NEXT_DATA = re.compile(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', re.S)
@@ -61,6 +64,23 @@ def fetch_html(url):
             if attempt == 3:
                 raise
             time.sleep(attempt)
+
+
+def fetch_complete(url, is_complete, cinema):
+    """fetch_html, retrying while the page lacks its data. The sites sometimes answer with
+    a page that has no film data (Urgoo did on 2026-09-24's morning run), which would
+    otherwise wipe out that cinema's screenings for the day. Returns the last page
+    fetched even if it never became complete, so the caller reports the failure."""
+    for wait in RETRY_WAITS + (None,):
+        html = fetch_html(url)
+        if is_complete(html):
+            return html
+        title = re.search(r"<title[^>]*>(.*?)</title>", html, re.S)
+        print(f"⚠️ {cinema}: {url} came back without its data ({len(html)} chars, "
+              f"title {clean_text(title.group(1)) if title else None!r}): {clean_text(html[:200])!r}")
+        if wait is not None:
+            time.sleep(wait)
+    return html
 
 
 def flight_payload(html):

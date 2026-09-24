@@ -18,7 +18,7 @@ import json
 import re
 import sys
 
-from common import duration_text, fetch_html, local_datetime, new_movie, next_data, showtime
+from common import duration_text, fetch_complete, fetch_html, local_datetime, new_movie, next_data, showtime
 
 CINEMA = "Tengis"
 BASE_URL = "https://www.tengis.mn"
@@ -36,8 +36,15 @@ def poster_url(path):
     return absolute(path) if path.startswith(("/", "http")) else ""
 
 
-def page_repo(url):
-    repo = next_data(fetch_html(url)).get("props", {}).get("pageProps", {}).get("repo")
+def repo_of(html):
+    return next_data(html).get("props", {}).get("pageProps", {}).get("repo")
+
+
+def page_repo(url, retry=False):
+    """The page's data. `retry` waits out a page served without it (worth it for the
+    homepage, which has every screening; film pages are only a fallback)."""
+    html = fetch_complete(url, lambda h: bool(repo_of(h)), CINEMA) if retry else fetch_html(url)
+    repo = repo_of(html)
     if not repo:
         raise RuntimeError(f"Tengis: no page data found on {url}")
     return repo
@@ -83,7 +90,7 @@ def film_page_sessions(slug, theatre_names):
 
 
 def scrape():
-    repo = page_repo(BASE_URL + "/")
+    repo = page_repo(BASE_URL + "/", retry=True)
     theatre_names = {t["id"]: t["title"] for t in repo.get("theatres") or []}
     movies, seen_sessions = {}, set()
 

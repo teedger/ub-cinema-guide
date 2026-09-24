@@ -18,7 +18,7 @@ from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 from bs4 import BeautifulSoup
 
-from common import clean_text, fetch_html, new_movie, showtime
+from common import clean_text, fetch_complete, fetch_html, new_movie, showtime
 
 CINEMA = "Prime Cineplex"
 BASE_URL = "https://www.primecineplex.mn"
@@ -140,7 +140,7 @@ def scrape_upcoming():
 
 
 def scrape():
-    movies = parse_homepage(fetch_html(BASE_URL + "/"))
+    movies = parse_homepage(fetch_complete(BASE_URL + "/", lambda html: bool(parse_homepage(html)), CINEMA))
     if not movies:
         print("❌ Prime Cineplex: no film tabs on the homepage")
     # A film that opens tomorrow can be in both lists: keep the one with the showtimes.
