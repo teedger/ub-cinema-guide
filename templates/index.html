@@ -136,6 +136,7 @@ function render(scrollToHero = false) {
                 <div class="hero-meta">${esc(metaLine(m))}</div>
                 <div class="hero-groups">${groups || '<div class="none">No screenings on this day.</div>'}</div>
                 <a class="hero-more" href="${filmHref(m.id)}">FULL DETAILS →</a>
+                <button class="share-btn" type="button" data-href="${filmHref(m.id)}" data-title="${esc(m.title)}" onclick="shareFilm(this)">${SHARE_ICON}SHARE</button>
             </div>`;
     }
 

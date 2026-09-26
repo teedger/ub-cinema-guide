@@ -113,6 +113,7 @@
 
         <div style="min-width:0">
             {% if film.description %}<p class="synopsis">{{ film.description }}</p>{% endif %}
+            <button class="share-btn" type="button" id="share" data-title="{{ film.title }}" onclick="shareFilm(this)">SHARE</button>
 
             <div class="sched-head">
                 <div><div class="label">Screenings · <span id="selRel"></span></div><div class="sel-long oswald" id="selLong"></div></div>
@@ -146,6 +147,7 @@ const openingEl = document.getElementById('opening');
 if (openingEl && OPENING) openingEl.textContent = longDay(OPENING);
 const EXTRA_DAYS = eventDates([FILM]);
 
+document.getElementById('share').insertAdjacentHTML('afterbegin', SHARE_ICON);
 document.querySelectorAll('.alias .dot').forEach(el => el.style.background = CIN[el.dataset.cinema] || '#fff');
 const dur = document.getElementById('duration');
 if (dur && FILM.duration_minutes) dur.textContent = `${fmtDuration(FILM.duration_minutes)} · ${FILM.duration_minutes} min`;

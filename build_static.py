@@ -4,6 +4,7 @@
 Reads output/latest.json (written by scraper_ultimate.py) and writes:
     site/index.html          the guide with the data embedded
     site/film/<id>.html      one detail page per film (shareable, with og: tags)
+    site/404.html            served for missing paths, e.g. old links to films no longer showing
     site/data/latest.json    the same data for anyone who wants it raw
     site/.nojekyll           so Pages serves the files as they are
     site/CNAME               keeps the custom domain across artifact deploys
@@ -58,6 +59,11 @@ def build():
                                    jsonld=seo.movie_jsonld(movie, page_url, SITE_URL, today=meta["date"]))
             with open(os.path.join(SITE_DIR, "film", f"{movie['id']}.html"), "w", encoding="utf-8") as f:
                 f.write(page)
+        # GitHub Pages serves this for any missing path, e.g. a shared link to a film that has left cinemas.
+        lost = render_template("404.html", movies=movies, meta=meta, upcoming=upcoming, static_mode=True,
+                               home_href="/", data_href="/data/latest.json", film_href="/film/{id}.html", site_url=SITE_URL)
+        with open(os.path.join(SITE_DIR, "404.html"), "w", encoding="utf-8") as f:
+            f.write(lost)
     with open(os.path.join(SITE_DIR, "data", "latest.json"), "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False)
     open(os.path.join(SITE_DIR, ".nojekyll"), "w").close()

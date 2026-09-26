@@ -6,7 +6,7 @@
     <title>{% block title %}UB Cinema Guide{% endblock %}</title>
     <meta name="description" content="{% block description %}Today's cinema showtimes in Ulaanbaatar. Urgoo, Tengis, Prime Cineplex, Skywing and CinemaNext listings merged into one guide, updated every morning.{% endblock %}">
     {% if canonical_url %}<link rel="canonical" href="{{ canonical_url }}">{% endif %}
-    <meta name="robots" content="index, follow, max-image-preview:large">
+    <meta name="robots" content="{% block robots %}index, follow, max-image-preview:large{% endblock %}">
     <meta name="theme-color" content="#0e0e0e">
 
     <link rel="icon" href="{{ home_href }}static/favicon.ico" sizes="32x32">
@@ -118,6 +118,9 @@
         .toast { position: fixed; bottom: 2rem; right: 2rem; background: var(--fg); color: var(--bg); padding: 12px 18px; font-size: 13px; font-weight: 700; opacity: 0; transform: translateY(10px); transition: all .2s; pointer-events: none; z-index: 50; }
         .toast.show { opacity: 1; transform: none; }
         .toast.error { background: var(--tengis); color: #fff; }
+        .share-btn { display: flex; align-items: center; gap: 7px; width: fit-content; margin-top: 14px; padding: 0; background: none; border: 0; cursor: pointer; font-family: inherit; font-size: 12px; color: var(--muted); font-weight: 700; letter-spacing: .06em; }
+        .share-btn:hover { color: var(--fg); }
+        .share-btn svg { width: 13px; height: 13px; flex: none; }
 
         @media (max-width: 760px) {
             .wrap, .topbar { padding-left: 18px; padding-right: 18px; }
@@ -153,6 +156,20 @@
         toast.textContent = message;
         toast.className = `toast ${type} show`;
         setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+    const SHARE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>';
+    // The phone's share sheet (Messenger, WhatsApp, Viber...) where there is one, otherwise copy the link.
+    // Shares the bare film page URL, whose og: tags give chat apps the poster and title for the preview.
+    async function shareFilm(btn) {
+        const url = new URL(btn.dataset.href || location.pathname, location.href);
+        url.search = ''; url.hash = '';
+        const data = { title: btn.dataset.title, url: url.href };
+        if (navigator.share) {
+            try { await navigator.share(data); return; }
+            catch (e) { if (e.name === 'AbortError') return; }
+        }
+        try { await navigator.clipboard.writeText(url.href); showToast('Link copied'); }
+        catch (e) { prompt('Copy this link:', url.href); }
     }
     const CIN = { 'Urgoo': '#3b82f6', 'Tengis': '#ef4444', 'Prime Cineplex': '#f59e0b', 'Skywing': '#a855f7', 'CinemaNext': '#2dd4bf' };
     const CLS = { 'Urgoo': 'c-urgoo', 'Tengis': 'c-tengis', 'Prime Cineplex': 'c-prime', 'Skywing': 'c-skywing', 'CinemaNext': 'c-cinemanext' };

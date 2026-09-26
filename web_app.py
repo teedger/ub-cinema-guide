@@ -82,6 +82,12 @@ def film(film_id):
                            jsonld=seo.movie_jsonld(movie, seo.film_url(film_id), today=data.get("date")), **page_context(data))
 
 
+@app.errorhandler(404)
+def not_found(error):
+    data = load_data()
+    return render_template("404.html", movies=data["movies"], **page_context(data)), 404
+
+
 @app.route("/api/movies")
 def api_movies():
     return jsonify(load_data())

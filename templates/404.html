@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Page not found · UB Cinema Guide{% endblock %}
+{% block robots %}noindex{% endblock %}
+
+{% block style %}
+        .lost { padding-top: 88px; padding-bottom: 72px; }
+        .lost .code { font-size: 13px; color: var(--muted); font-weight: 700; letter-spacing: .1em; }
+        .lost h1 { font-size: clamp(40px, 6.5vw, 80px); line-height: .95; margin: 12px 0 0; text-wrap: balance; }
+        .lost p { font-size: 17px; line-height: 1.55; color: var(--fg-2); margin: 20px 0 0; max-width: 560px; }
+        .lost .home { display: inline-block; margin-top: 26px; font-size: 12px; color: var(--muted); font-weight: 700; letter-spacing: .06em; text-decoration: none; }
+        .lost .home:hover { color: var(--fg); }
+        .label { font-size: 12px; color: var(--muted); font-weight: 700; }
+        .now { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 28px 18px; margin-top: 14px; padding-bottom: 64px; }
+        .now a { text-decoration: none; opacity: .8; transition: opacity .2s, transform .2s; }
+        .now a:hover { opacity: 1; transform: translateY(-4px); }
+        .now .p { aspect-ratio: 2 / 3; background: #1a1a1a; overflow: hidden; }
+        .now .p img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .now .n { font-size: 18px; letter-spacing: .03em; margin-top: 8px; line-height: 1.05; }
+{% endblock %}
+
+{% block content %}
+    {# Served for any missing path, at any depth, so every link here is absolute. #}
+    <div class="wrap lost">
+        <div class="code">404</div>
+        <h1 class="oswald" id="lostTitle">Page not found</h1>
+        <p id="lostText">There's nothing at this address. The guide below lists everything showing in Ulaanbaatar today.</p>
+        <a class="home" href="{{ home_href }}">SEE WHAT'S ON →</a>
+    </div>
+    {% set now_showing = movies | rejectattr('id', 'in', upcoming) | list %}
+    {% if now_showing %}
+    <div class="wrap">
+        <div class="label">Now showing</div>
+        <div class="now">
+            {% for m in now_showing %}<a href="{{ film_href | replace('{id}', m.id | urlencode) }}"><div class="p">{% if m.poster %}<img src="{{ m.poster }}" alt="{{ m.title }} poster" loading="lazy">{% endif %}</div><div class="n oswald">{{ m.title }}</div></a>{% endfor %}
+        </div>
+    </div>
+    {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// A shared link to a film page outlives the film: say so instead of a bare "not found".
+if (location.pathname.startsWith('/film/')) {
+    document.getElementById('lostTitle').textContent = 'This film is no longer showing';
+    document.getElementById('lostText').textContent = "It has left Ulaanbaatar cinemas, or the link is mistyped. Here's what's on now.";
+}
+</script>
+{% endblock %}
