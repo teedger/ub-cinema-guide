@@ -48,6 +48,31 @@
         .card .when { position: absolute; left: 0; top: 10px; padding: 5px 8px; background: var(--fg); color: var(--bg); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
         .card .meta .onsale { color: var(--direct); }
 
+        /* Top 10: big outlined rank numerals with the poster overlapping each one, in one sideways-scrolling row. */
+        .top10 { padding-bottom: 72px; }
+        .top-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; }
+        .top-head h2 { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 18px; margin: 0; font-size: clamp(44px, 6vw, 72px); line-height: .9; }
+        .top-head h2 span { font-family: 'Manrope', sans-serif; font-size: 12px; font-weight: 700; letter-spacing: .32em; color: var(--muted); text-transform: uppercase; }
+        .top-nav { display: flex; gap: 8px; }
+        .top-nav button { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line-3); background: transparent; color: var(--fg); font: 700 15px 'Manrope', sans-serif; cursor: pointer; }
+        .top-nav button:hover:not(:disabled) { border-color: var(--muted); }
+        .top-nav button:disabled { opacity: .3; cursor: default; }
+        .top-row { display: flex; gap: 18px; margin: 0 auto; padding-top: 28px; list-style: none; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; overscroll-behavior-x: contain; }
+        .top-row::-webkit-scrollbar { display: none; }
+        .top-item { display: flex; align-items: flex-start; flex: none; scroll-snap-align: start; }
+        .top-num { font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 190px; line-height: 1; letter-spacing: -.02em; margin-top: 60px; margin-right: -12px;
+            color: transparent; -webkit-text-stroke: 2px rgba(245,245,240,.55); background: linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,0) 80%); -webkit-background-clip: text; background-clip: text; user-select: none; }
+        .top-card { position: relative; width: 170px; text-decoration: none; opacity: .88; transition: opacity .2s, transform .2s; }
+        .top-card:hover { opacity: 1; transform: translateY(-6px); }
+        .top-card .p { position: relative; aspect-ratio: 2 / 3; background: #1a1a1a; overflow: hidden; box-shadow: -14px 0 28px -10px rgba(0,0,0,.9); }
+        .top-card .p img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .top-card .in-ub { position: absolute; left: 0; top: 10px; padding: 5px 8px; background: var(--fg); color: var(--bg); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+        .top-card .n { font-size: 20px; letter-spacing: .03em; margin-top: 10px; line-height: 1.05; }
+        .top-card .g { font-size: 12px; color: var(--muted); font-weight: 700; margin-top: 4px; }
+        .top-src { font-size: 11px; color: var(--faint); font-weight: 600; margin-top: 18px; }
+        .top-src a { color: var(--muted); }
+        @media (pointer: coarse) { .top-nav { display: none; } }
+
         @media (max-width: 760px) {
             .hero-grid { grid-template-columns: 1fr; gap: 24px; padding-top: 28px; }
             .hero-poster { width: 200px; min-height: 0; margin: 0 auto; }
@@ -55,6 +80,9 @@
             .filters { padding-top: 36px; }
             .grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 22px 14px; }
             .card .title { font-size: 18px; }
+            .top-num { font-size: 140px; margin-top: 44px; margin-right: -9px; }
+            .top-card { width: 130px; }
+            .top-card .n { font-size: 17px; }
         }
 {% endblock %}
 
@@ -90,6 +118,28 @@
 
     <div class="wrap grid" id="grid"></div>
 
+    {% if top10 and top10.films %}
+    <section class="top10" aria-labelledby="top10Title">
+        <div class="wrap top-head">
+            <h2 class="oswald" id="top10Title">Top 10 <span>Worldwide box office {{ top10.year }}</span></h2>
+            <div class="top-nav"><button type="button" id="topPrev" aria-label="Scroll the top 10 left">←</button><button type="button" id="topNext" aria-label="Scroll the top 10 right">→</button></div>
+        </div>
+        <ol class="wrap top-row" id="topRow">
+            {% for f in top10.films %}
+            <li class="top-item">
+                <span class="top-num" aria-hidden="true">{{ f.rank }}</span>
+                <a class="top-card" href="{% if f.film_id %}{{ film_href.replace('{id}', f.film_id | urlencode) }}{% else %}{{ f.url }}{% endif %}"{% if not f.film_id %} target="_blank" rel="noopener"{% endif %}>
+                    <div class="p">{% if f.poster %}<img src="{{ f.poster }}" alt="{{ f.title }} poster" loading="lazy">{% endif %}{% if f.film_id %}<span class="in-ub">{{ 'Coming to UB' if f.film_id in upcoming else 'In UB cinemas' }}</span>{% endif %}</div>
+                    <div class="n oswald">{{ f.title }}</div>
+                    <div class="g" title="{{ '${:,}'.format(f.worldwide) }} worldwide">{{ f.worldwide | short_money }} worldwide</div>
+                </a>
+            </li>
+            {% endfor %}
+        </ol>
+        <div class="wrap top-src">Figures from <a href="{{ top10.source }}" target="_blank" rel="noopener">Box Office Mojo</a>, updated {{ top10.scraped_at[:10] }}.</div>
+    </section>
+    {% endif %}
+
     <div class="wrap soon-head" id="soonHead" hidden>
         <h2 class="oswald">Coming soon</h2>
         <div class="count" id="soonCount"></div>
@@ -107,6 +157,18 @@ const filmHref = id => FILM_HREF.replace('{id}', encodeURIComponent(id));
 const EXTRA_DAYS = eventDates(DATA);
 const state = { sel: TODAY, spot: null, cinema: null, query: '' };
 try { const q = new URLSearchParams(location.search); if (q.get('date')) state.sel = q.get('date'); if (q.get('film')) state.spot = q.get('film'); } catch (e) {}
+
+// Top 10 row: the arrows page through it on desktop and grey out at either end.
+const topRow = document.getElementById('topRow');
+if (topRow) {
+    const prev = document.getElementById('topPrev'), next = document.getElementById('topNext');
+    const ends = () => { prev.disabled = topRow.scrollLeft < 2; next.disabled = topRow.scrollLeft > topRow.scrollWidth - topRow.clientWidth - 2; };
+    prev.onclick = () => topRow.scrollBy({ left: -topRow.clientWidth * .8, behavior: 'smooth' });
+    next.onclick = () => topRow.scrollBy({ left: topRow.clientWidth * .8, behavior: 'smooth' });
+    topRow.addEventListener('scroll', ends, { passive: true });
+    window.addEventListener('resize', ends);
+    ends();
+}
 
 function render(scrollToHero = false) {
     dayStrip(document.getElementById('days'), state.sel, id => { state.sel = id; render(); }, null, EXTRA_DAYS);

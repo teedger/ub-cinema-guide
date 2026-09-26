@@ -12,12 +12,14 @@ from threading import Thread
 
 from flask import Flask, abort, jsonify, render_template, request
 
+import boxoffice
 import scraper_ultimate
 import seo
 import watchlist
 from merge import upcoming_date
 
 app = Flask(__name__)
+app.jinja_env.filters["short_money"] = boxoffice.short_money
 app.secret_key = os.urandom(24)
 
 scraping_status = {"is_scraping": False, "last_scrape": None, "message": "", "movies_count": 0}
@@ -69,6 +71,7 @@ def page_context(data):
 def index():
     data = load_data()
     return render_template("index.html", movies=data["movies"], scraping_status=scraping_status,
+                           top10=boxoffice.link_to_guide(boxoffice.load(), data["movies"]),
                            jsonld=seo.home_jsonld(data["movies"], upcoming=upcoming_films(data)), **page_context(data))
 
 

@@ -22,6 +22,7 @@ import sys
 
 from flask import render_template
 
+import boxoffice
 import scraper_ultimate
 import seo
 from common import BASE_DIR
@@ -47,6 +48,7 @@ def build():
     upcoming = upcoming_films(data)
     with app.test_request_context("/"):
         home = render_template("index.html", movies=movies, meta=meta, upcoming=upcoming, scraping_status=None, static_mode=True,
+                               top10=boxoffice.link_to_guide(boxoffice.load(), movies),
                                home_href="./", data_href="data/latest.json", film_href="film/{id}.html",
                                site_url=SITE_URL, canonical_url=f"{SITE_URL}/", jsonld=seo.home_jsonld(movies, SITE_URL, upcoming))
         with open(os.path.join(SITE_DIR, "index.html"), "w", encoding="utf-8") as f:

@@ -39,6 +39,11 @@ jobs:
         # Plain HTTP against the cinema sites: no browser needed.
         run: python scraper_ultimate.py
 
+      - name: Fetch the worldwide box office top 10
+        # Optional extra: if Box Office Mojo is down the site still publishes, just without the Top 10 row.
+        continue-on-error: true
+        run: python boxoffice.py
+
       - name: Build the static site
         run: python build_static.py
 
