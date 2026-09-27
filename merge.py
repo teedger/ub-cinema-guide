@@ -16,6 +16,7 @@ import unicodedata
 
 from fuzzywuzzy import fuzz
 
+import categories
 from common import FILES_DIR, clean_text
 
 ALIASES_FILE = os.path.join(FILES_DIR, "title_aliases.json")
@@ -109,7 +110,32 @@ def first_nonempty(cluster, field):
     for m in cluster:
         if m.get(field):
             return m[field]
-    return "" if field not in ("genres",) else []
+    return ""
+
+
+def standard_genres(cluster):
+    """Every cinema's genres for the film in the shared vocabulary, first-mentioned first."""
+    genres = []
+    for m in cluster:
+        for name in m.get("genres") or []:
+            genre = categories.standard_genre(name)
+            if not genre:
+                print(f"⚠️ Unknown genre {name!r} from {m['cinema']} ({m['title']}): add it to categories.py")
+            elif genre not in genres:
+                genres.append(genre)
+    return genres
+
+
+def standard_rating(cluster):
+    """The strictest rating any of the film's cinemas gives it, as G / PG / PG-13 / R."""
+    ratings = []
+    for m in cluster:
+        if m.get("rating"):
+            rating = categories.standard_rating(m["rating"])
+            if not rating:
+                print(f"⚠️ Unknown rating {m['rating']!r} from {m['cinema']} ({m['title']}): add it to categories.py")
+            ratings.append(rating)
+    return categories.strictest(ratings)
 
 
 def merge_cluster(cluster):
@@ -147,10 +173,10 @@ def merge_cluster(cluster):
         "title": title,
         "titles": {m["cinema"]: m["title"] for m in cluster},
         "description": max(descriptions, key=len) if descriptions else "",
-        "genres": first_nonempty(cluster, "genres"),
+        "genres": standard_genres(cluster),
         "duration": first_nonempty(cluster, "duration"),
         "duration_minutes": first_nonempty(cluster, "duration_minutes") or None,
-        "rating": first_nonempty(cluster, "rating"),
+        "rating": standard_rating(cluster),
         "start_date": start_dates[0] if start_dates else "",
         "poster": first_nonempty(cluster, "poster"),
         "trailer": first_nonempty(cluster, "trailer"),

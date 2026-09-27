@@ -25,6 +25,14 @@
         .filters { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding-top: 56px; flex-wrap: wrap; }
         .count { font-size: 12px; color: var(--muted); font-weight: 700; }
         .pills { display: flex; gap: 4px; flex-wrap: wrap; }
+        .filter-side { display: flex; align-items: center; gap: 4px 12px; flex-wrap: wrap; justify-content: flex-end; }
+        .selects { display: flex; gap: 4px; }
+        .select { appearance: none; -webkit-appearance: none; padding: 7px 30px 7px 12px; border-radius: 999px; font: 700 12px 'Manrope', sans-serif; cursor: pointer; color: var(--muted); background: transparent no-repeat right 11px center / 10px 6px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238c8c85' stroke-width='1.6'/%3E%3C/svg%3E"); border: 1px solid var(--line-3); outline: none; }
+        .select:hover, .select:focus-visible { border-color: var(--muted); }
+        .select.on { background-color: var(--fg); color: var(--bg); border-color: var(--fg);
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%230e0e0e' stroke-width='1.6'/%3E%3C/svg%3E"); }
+        .select option { background: var(--bg); color: var(--fg); }
 
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 28px 20px; padding-top: 24px; padding-bottom: 64px; flex: 1; }
         .card { cursor: pointer; opacity: .75; transition: opacity .2s, transform .2s; }
@@ -115,7 +123,13 @@
 
     <div class="wrap filters">
         <div class="count" id="count"></div>
-        <div class="pills" id="pills"></div>
+        <div class="filter-side">
+            <div class="pills" id="pills"></div>
+            <div class="selects">
+                <select class="select" id="genre" aria-label="Filter by genre"><option value="">All genres</option></select>
+                <select class="select" id="rating" aria-label="Filter by rating"><option value="">All ratings</option></select>
+            </div>
+        </div>
     </div>
 
     <div class="wrap grid" id="grid"></div>
@@ -159,7 +173,7 @@ const FILM_HREF = {{ film_href | tojson }};
 const TOP_RANK = Object.fromEntries({{ (top10.films if top10 else []) | selectattr('film_id') | list | tojson }}.map(f => [f.film_id, f.rank]));
 const filmHref = id => FILM_HREF.replace('{id}', encodeURIComponent(id));
 const EXTRA_DAYS = eventDates(DATA);
-const state = { sel: TODAY, spot: null, cinema: null, query: '' };
+const state = { sel: TODAY, spot: null, cinema: null, query: '', genre: '', rating: '' };
 try { const q = new URLSearchParams(location.search); if (q.get('date')) state.sel = q.get('date'); if (q.get('film')) state.spot = q.get('film'); } catch (e) {}
 
 // Top 10 row: the arrows page through it on desktop and grey out at either end.
@@ -178,7 +192,8 @@ function render(scrollToHero = false) {
     dayStrip(document.getElementById('days'), state.sel, id => { state.sel = id; render(); }, null, EXTRA_DAYS);
 
     const q = state.query.trim().toLowerCase();
-    const matches = m => !q || [m.title, ...Object.values(m.titles || {}), ...(m.genres || [])].join(' ').toLowerCase().includes(q);
+    const matches = m => (!q || [m.title, ...Object.values(m.titles || {}), ...(m.genres || [])].join(' ').toLowerCase().includes(q))
+        && (!state.genre || (m.genres || []).includes(state.genre)) && (!state.rating || m.rating === state.rating);
     const visible = DATA.map(m => ({ m, groups: groupsFor(m, state.sel, state.cinema) })).filter(x => x.groups.length && matches(x.m));
     const spot = visible.find(x => x.m.id === state.spot) || visible[0];
     if (spot) state.spot = spot.m.id;
@@ -187,7 +202,7 @@ function render(scrollToHero = false) {
     const heroGrid = document.getElementById('heroGrid');
     document.getElementById('heroBg').style.backgroundImage = spot && spot.m.poster ? `url("${spot.m.poster}")` : 'none';
     if (!spot) {
-        heroGrid.innerHTML = `<div></div><div class="none" style="padding:40px 0 80px">No screenings match on ${esc(longDay(state.sel))}. Try another day, cinema or search.</div>`;
+        heroGrid.innerHTML = `<div></div><div class="none" style="padding:40px 0 80px">No screenings match on ${esc(longDay(state.sel))}. Try another day, cinema, genre, rating or search.</div>`;
     } else {
         const m = spot.m;
         const groups = spot.groups.map(g => `<div>
@@ -250,6 +265,15 @@ function render(scrollToHero = false) {
     if (scrollToHero) document.getElementById('hero').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 document.getElementById('q').addEventListener('input', e => { state.query = e.target.value; render(); });
+
+// Genre and rating dropdowns: genres and ratings are standardised across cinemas by merge.py (categories.py).
+const RATING_ORDER = ['G', 'PG', 'PG-13', 'R'];
+for (const [id, values] of [['genre', [...new Set(DATA.flatMap(m => m.genres || []))].sort()],
+                            ['rating', RATING_ORDER.filter(r => DATA.some(m => m.rating === r))]]) {
+    const el = document.getElementById(id);
+    el.insertAdjacentHTML('beforeend', values.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join(''));
+    el.onchange = () => { state[id] = el.value; el.classList.toggle('on', !!el.value); render(); };
+}
 render();
 </script>
 {% endblock %}
