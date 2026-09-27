@@ -153,6 +153,7 @@ def merge_cluster(cluster):
         "rating": first_nonempty(cluster, "rating"),
         "start_date": start_dates[0] if start_dates else "",
         "poster": first_nonempty(cluster, "poster"),
+        "trailer": first_nonempty(cluster, "trailer"),
         "cinemas": [cinemas[c] for c in CINEMA_PRIORITY if c in cinemas]
                    + [v for k, v in cinemas.items() if k not in CINEMA_PRIORITY],
         "dates": sorted({s["date"] for s in all_shows if s["date"]}),

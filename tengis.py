@@ -64,7 +64,7 @@ def film_record(film):
                      poster=poster_url(film.get("verticalPosterUrl")),
                      description=film.get("description"), genres=genres,
                      duration=duration_text(film.get("duration")), rating=film.get("rating") or "",
-                     start_date=opening.date().isoformat() if opening else "")
+                     start_date=opening.date().isoformat() if opening else "", trailer=film.get("trailer") or "")
 
 
 def session_showtime(session, branch, url):

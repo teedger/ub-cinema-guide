@@ -16,6 +16,7 @@ merge.py can combine them regardless of which cinema they came from:
         "duration_minutes": 157,
         "rating": "PG13",
         "start_date": "2026-09-09",
+        "trailer": "mYRc2Gl7geY",              # YouTube video id, only when the cinema links one
         "showtimes": [showtime(...), ...],
     }
 
@@ -44,6 +45,7 @@ USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 RETRY_WAITS = (15, 60, 120)
 
 UB_TZ = datetime.timezone(datetime.timedelta(hours=8))  # Ulaanbaatar, no daylight saving
+YOUTUBE_ID = re.compile(r"(?:youtube(?:-nocookie)?\.com/(?:watch\?(?:.*&)?v=|embed/|shorts/|live/)|youtu\.be/)([\w-]{11})")
 FLIGHT_CHUNK = re.compile(r"self\.__next_f\.push\((\[.*?\])\)</script>", re.S)
 NEXT_DATA = re.compile(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', re.S)
 
@@ -137,7 +139,7 @@ def duration_text(minutes):
 
 
 def new_movie(cinema, source_id, title, url, poster="", description="", genres=None,
-              duration="", rating="", start_date=""):
+              duration="", rating="", start_date="", trailer=""):
     return {
         "cinema": cinema,
         "source_id": str(source_id),
@@ -150,6 +152,7 @@ def new_movie(cinema, source_id, title, url, poster="", description="", genres=N
         "duration_minutes": parse_duration_minutes(duration),
         "rating": clean_text(rating),
         "start_date": normalize_date(start_date),
+        "trailer": youtube_id(trailer),
         "showtimes": [],
     }
 
@@ -167,6 +170,13 @@ def showtime(date, branch, time, hall="", end_time="", fmt="", url="", available
         "url": url or "",
         "available": bool(available),
     }
+
+
+def youtube_id(url):
+    """The video id of a YouTube link in any of its forms, else ''. Other links (Tengis
+    also posts Facebook reels) are ignored: the site only embeds YouTube trailers."""
+    match = YOUTUBE_ID.search(clean_text(url))
+    return match.group(1) if match else ""
 
 
 def clean_text(value):

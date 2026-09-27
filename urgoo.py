@@ -100,8 +100,10 @@ def parse_movie_page(html, link):
     if not poster:
         og = soup.find("meta", property="og:image")
         poster = og["content"] if og and og.get("content") else ""
+    # The trailer link is only in the page's streamed JSON, where quotes may be escaped: \"trailerUrl\":\"...\"
+    trailer = re.search(r'trailerUrl\\*"\s*:\s*\\*"([^"\\]*)', html)
     return new_movie(CINEMA, link["source_id"], heading, link["url"],
-                     poster=poster, description=description, **details)
+                     poster=poster, description=description, trailer=trailer.group(1) if trailer else "", **details)
 
 
 def fetch_movie_page(url):

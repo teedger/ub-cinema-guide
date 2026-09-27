@@ -56,6 +56,17 @@
         .week .c.on { background: rgba(255,255,255,.06); }
         .week .c.on.has { color: var(--fg); }
 
+        /* Trailer: YouTube's thumbnail until tapped, then the player (nothing loads from YouTube before that). */
+        .trailer { position: relative; margin-top: 12px; max-width: 640px; aspect-ratio: 16 / 9; background: #000; overflow: hidden; }
+        .trailer button { position: absolute; inset: 0; width: 100%; padding: 0; border: 0; background: none; cursor: pointer; }
+        .trailer img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: .85; transition: opacity .2s; }
+        .trailer button:hover img { opacity: 1; }
+        .trailer .play { position: absolute; left: 50%; top: 50%; width: 68px; height: 68px; margin: -34px 0 0 -34px; border-radius: 50%; background: rgba(14,14,14,.72); border: 2px solid var(--fg); }
+        .trailer .play::after { content: ''; position: absolute; left: 26px; top: 20px; border-style: solid; border-width: 13px 0 13px 21px; border-color: transparent transparent transparent var(--fg); }
+        .trailer iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+        .trailer-link { display: inline-block; margin-top: 12px; font-size: 12px; color: var(--muted); font-weight: 700; letter-spacing: .06em; text-decoration: none; }
+        .trailer-link:hover { color: var(--fg); }
+
         .notice { margin-top: 56px; padding: 26px 28px; border: 1px solid var(--line-3); border-left: 3px solid var(--tengis); max-width: 640px; }
         .notice .n-title { font-size: 34px; line-height: 1; margin-top: 6px; }
         .notice p { font-size: 15px; line-height: 1.55; color: var(--fg-2); margin: 12px 0 0; }
@@ -134,6 +145,18 @@
         <div style="min-width:0">
             {% if film.description %}<p class="synopsis">{{ film.description }}</p>{% endif %}
             <button class="share-btn" type="button" id="share" data-title="{{ film.title }}" onclick="shareFilm(this)">SHARE</button>
+
+            {% if film.trailer %}
+            <div class="label" style="margin-top:44px">Trailer</div>
+            <div class="trailer" id="trailer">
+                <button type="button" aria-label="Play the {{ film.title }} trailer"><img src="https://i.ytimg.com/vi/{{ film.trailer }}/hqdefault.jpg" alt="" loading="lazy"><span class="play"></span></button>
+            </div>
+            <a class="trailer-link" href="https://www.youtube.com/watch?v={{ film.trailer }}" target="_blank" rel="noopener">WATCH ON YOUTUBE ↗</a>
+            <script>
+                document.querySelector('#trailer button').onclick = () => document.getElementById('trailer').innerHTML =
+                    '<iframe src="https://www.youtube-nocookie.com/embed/{{ film.trailer }}?autoplay=1&rel=0" title="{{ film.title }} trailer" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>';
+            </script>
+            {% endif %}
 
             {% if film.box_office %}
             <div class="notice">
