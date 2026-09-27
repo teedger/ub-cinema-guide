@@ -34,7 +34,9 @@
         .card.sel .poster { border-color: var(--fg); }
         .card .poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
         .card .dots { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; gap: 4px; }
+        .card .dots { align-items: center; }
         .card .dots span { width: 6px; height: 6px; border-radius: 50%; }
+        .card .dots .top { width: auto; height: auto; border-radius: 0; margin-left: 4px; padding: 3px 6px; background: var(--fg); color: var(--bg); font-size: 9px; font-weight: 800; letter-spacing: .08em; line-height: 1; }
         .card .title { font-size: 22px; letter-spacing: .03em; margin-top: 10px; line-height: 1.05; }
         .card .meta { font-size: 11px; color: var(--muted); margin-top: 4px; font-weight: 600; }
         .empty { padding: 80px 0; text-align: center; color: var(--muted); font-weight: 600; grid-column: 1 / -1; }
@@ -153,6 +155,8 @@ const DATA = {{ movies | tojson }};
 // TEST: random order on every page load instead of alphabetical (Fisher-Yates shuffle).
 for (let i = DATA.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [DATA[i], DATA[j]] = [DATA[j], DATA[i]]; }
 const FILM_HREF = {{ film_href | tojson }};
+// Worldwide box office rank of the films the Top 10 row shares with the guide: {film id: rank}.
+const TOP_RANK = Object.fromEntries({{ (top10.films if top10 else []) | selectattr('film_id') | list | tojson }}.map(f => [f.film_id, f.rank]));
 const filmHref = id => FILM_HREF.replace('{id}', encodeURIComponent(id));
 const EXTRA_DAYS = eventDates(DATA);
 const state = { sel: TODAY, spot: null, cinema: null, query: '' };
@@ -219,7 +223,7 @@ function render(scrollToHero = false) {
     document.getElementById('grid').innerHTML = visible.length ? visible.map(({ m, groups }) => `
         <div class="card ${m.id === state.spot ? 'sel' : ''}" data-id="${esc(m.id)}">
             <div class="poster">${m.poster ? `<img src="${esc(m.poster)}" alt="${esc(m.title)} poster" loading="lazy">` : ''}
-                <div class="dots">${[...new Set(groups.map(g => g.color))].map(c => `<span style="background:${c}"></span>`).join('')}</div></div>
+                <div class="dots">${[...new Set(groups.map(g => g.color))].map(c => `<span style="background:${c}"></span>`).join('')}${TOP_RANK[m.id] ? `<span class="top">TOP ${TOP_RANK[m.id]}</span>` : ''}</div></div>
             <div class="title oswald">${esc(m.title)}</div>
             <div class="meta">${esc(metaLine(m))}</div>
         </div>`).join('') : `<div class="empty">Nothing to show for this day.</div>`;
