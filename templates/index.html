@@ -130,7 +130,7 @@
             {% for f in top10.films %}
             <li class="top-item">
                 <span class="top-num" aria-hidden="true">{{ f.rank }}</span>
-                <a class="top-card" href="{% if f.film_id %}{{ film_href.replace('{id}', f.film_id | urlencode) }}{% else %}{{ f.url }}{% endif %}"{% if not f.film_id %} target="_blank" rel="noopener"{% endif %}>
+                <a class="top-card" href="{% if f.film_id or f.page_id %}{{ film_href.replace('{id}', (f.film_id or f.page_id) | urlencode) }}{% else %}{{ f.url }}{% endif %}"{% if not (f.film_id or f.page_id) %} target="_blank" rel="noopener"{% endif %}>
                     <div class="p">{% if f.poster %}<img src="{{ f.poster }}" alt="{{ f.title }} poster" loading="lazy">{% endif %}{% if f.film_id %}<span class="in-ub">{{ 'Coming to UB' if f.film_id in upcoming else 'In UB cinemas' }}</span>{% endif %}</div>
                     <div class="n oswald">{{ f.title }}</div>
                     <div class="g" title="{{ '${:,}'.format(f.worldwide) }} worldwide">{{ f.worldwide | short_money }} worldwide</div>

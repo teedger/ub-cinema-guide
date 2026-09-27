@@ -128,9 +128,11 @@ def film_summary(movie, opening=""):
     return " · ".join(bits)
 
 
-def write_crawler_files(site_dir, movies, data, site_url=SITE_URL, upcoming=None):
-    """robots.txt, sitemap.xml and llms.txt next to the built pages. `upcoming` is {film id: first day}."""
+def write_crawler_files(site_dir, movies, data, site_url=SITE_URL, upcoming=None, elsewhere=None):
+    """robots.txt, sitemap.xml and llms.txt next to the built pages. `upcoming` is {film id: first day};
+    `elsewhere` are the box office top-10 films no Ulaanbaatar cinema shows (they have pages too)."""
     upcoming = upcoming or {}
+    elsewhere = elsewhere or []
     day = (data.get("date") or date.today().isoformat())[:10]
 
     with open(os.path.join(site_dir, "robots.txt"), "w", encoding="utf-8") as f:
@@ -138,7 +140,8 @@ def write_crawler_files(site_dir, movies, data, site_url=SITE_URL, upcoming=None
                 "User-agent: *\nAllow: /\n\n"
                 f"Sitemap: {site_url}/sitemap.xml\n")
 
-    urls = [(f"{site_url}/", "daily", "1.0")] + [(film_url(m["id"], site_url), "daily", "0.8") for m in movies]
+    urls = ([(f"{site_url}/", "daily", "1.0")] + [(film_url(m["id"], site_url), "daily", "0.8") for m in movies]
+            + [(film_url(m["id"], site_url), "weekly", "0.3") for m in elsewhere])
     with open(os.path.join(site_dir, "sitemap.xml"), "w", encoding="utf-8") as f:
         f.write('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n')
         for loc, freq, prio in urls:
@@ -164,5 +167,9 @@ def write_crawler_files(site_dir, movies, data, site_url=SITE_URL, upcoming=None
         for m in films:
             summary = film_summary(m, upcoming.get(m["id"], ""))
             lines.append(f"- [{m['title']}]({film_url(m['id'], site_url)})" + (f": {summary}" if summary else ""))
+    if elsewhere:
+        lines += ["", "## Box office top 10 films not showing in Ulaanbaatar", ""]
+        lines += [f"- [{m['title']}]({film_url(m['id'], site_url)}): #{m['box_office']['rank']} worldwide in {m['box_office']['year']}, "
+                  "no Ulaanbaatar cinema is showing it" for m in elsewhere]
     with open(os.path.join(site_dir, "llms.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")

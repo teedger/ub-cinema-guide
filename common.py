@@ -48,10 +48,10 @@ FLIGHT_CHUNK = re.compile(r"self\.__next_f\.push\((\[.*?\])\)</script>", re.S)
 NEXT_DATA = re.compile(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', re.S)
 
 
-def fetch_html(url):
+def fetch_html(url, language="mn,en;q=0.8"):
     """Download a page over plain HTTP, for the sites that render on the server."""
     # gzip matters: the pages are up to 1 MB of mostly repeated markup and the servers are far away.
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept-Language": "mn,en;q=0.8",
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept-Language": language,
                                                    "Accept-Encoding": "gzip"})
     for attempt in (1, 2, 3):  # pages occasionally time out or arrive cut short
         try:

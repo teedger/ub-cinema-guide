@@ -79,6 +79,9 @@ def index():
 def film(film_id):
     data = load_data()
     movie = next((m for m in data["movies"] if m["id"] == film_id), None)
+    if movie is None:  # a box office top-10 film no Ulaanbaatar cinema shows
+        elsewhere = boxoffice.not_showing_films(boxoffice.link_to_guide(boxoffice.load(), data["movies"]))
+        movie = next((m for m in elsewhere if m["id"] == film_id), None)
     if movie is None:
         abort(404)
     return render_template("film.html", film=movie, movies=data["movies"],

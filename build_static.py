@@ -3,7 +3,8 @@
 
 Reads output/latest.json (written by scraper_ultimate.py) and writes:
     site/index.html          the guide with the data embedded
-    site/film/<id>.html      one detail page per film (shareable, with og: tags)
+    site/film/<id>.html      one detail page per film (shareable, with og: tags), plus one
+                             for each box office top-10 film no Ulaanbaatar cinema shows
     site/404.html            served for missing paths, e.g. old links to films no longer showing
     site/data/latest.json    the same data for anyone who wants it raw
     site/.nojekyll           so Pages serves the files as they are
@@ -46,14 +47,16 @@ def build():
     os.makedirs(os.path.join(SITE_DIR, "film"))
 
     upcoming = upcoming_films(data)
+    top10 = boxoffice.link_to_guide(boxoffice.load(), movies)
+    elsewhere = boxoffice.not_showing_films(top10)  # top-10 films no Ulaanbaatar cinema shows
     with app.test_request_context("/"):
         home = render_template("index.html", movies=movies, meta=meta, upcoming=upcoming, scraping_status=None, static_mode=True,
-                               top10=boxoffice.link_to_guide(boxoffice.load(), movies),
+                               top10=top10,
                                home_href="./", data_href="data/latest.json", film_href="film/{id}.html",
                                site_url=SITE_URL, canonical_url=f"{SITE_URL}/", jsonld=seo.home_jsonld(movies, SITE_URL, upcoming))
         with open(os.path.join(SITE_DIR, "index.html"), "w", encoding="utf-8") as f:
             f.write(home)
-        for movie in movies:
+        for movie in movies + elsewhere:
             page_url = seo.film_url(movie["id"], SITE_URL)
             page = render_template("film.html", film=movie, movies=movies, meta=meta, upcoming=upcoming, static_mode=True,
                                    home_href="../", data_href="../data/latest.json", film_href="{id}.html",
@@ -72,10 +75,10 @@ def build():
     with open(os.path.join(SITE_DIR, "CNAME"), "w") as f:
         f.write(CUSTOM_DOMAIN + "\n")
     shutil.copytree(os.path.join(BASE_DIR, "static"), os.path.join(SITE_DIR, "static"))
-    seo.write_crawler_files(SITE_DIR, movies, data, SITE_URL, upcoming)
+    seo.write_crawler_files(SITE_DIR, movies, data, SITE_URL, upcoming, elsewhere)
 
     broken = [name for name, info in data.get("cinemas", {}).items() if info.get("error")]
-    print(f"✅ Built {SITE_DIR} with {len(movies)} films ({len(upcoming)} coming soon) and {len(movies)} detail pages" + (f" (cinemas with errors: {', '.join(broken)})" if broken else ""))
+    print(f"✅ Built {SITE_DIR} with {len(movies)} films ({len(upcoming)} coming soon) and {len(movies) + len(elsewhere)} detail pages ({len(elsewhere)} box office films not showing here)" + (f" (cinemas with errors: {', '.join(broken)})" if broken else ""))
 
 
 if __name__ == "__main__":

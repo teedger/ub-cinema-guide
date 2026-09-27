@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
-{% block title %}{{ film.title }} showtimes in Ulaanbaatar · UB Cinema Guide{% endblock %}
-{% block description %}{{ film.title }} {% if upcoming.get(film.id) %}opens {{ upcoming[film.id] }} in Ulaanbaatar: {% endif %}showtimes at {{ film.cinemas | map(attribute='name') | join(', ') }}{% if film.genres %} · {{ film.genres | join(', ') }}{% endif %}{% if film.duration_minutes %} · {{ film.duration_minutes }} min{% endif %}{% if film.rating %} · {{ film.rating }}{% endif %}{% if film.description %} · {{ film.description | truncate(120) }}{% endif %}{% endblock %}
+{% block title %}{% if film.box_office %}{{ film.title }}: not showing in Ulaanbaatar{% else %}{{ film.title }} showtimes in Ulaanbaatar{% endif %} · UB Cinema Guide{% endblock %}
+{% block description %}{% if film.box_office %}{{ film.title }}: #{{ film.box_office.rank }} at the {{ film.box_office.year }} worldwide box office with {{ film.box_office.worldwide | short_money }}, but no Ulaanbaatar cinema is showing it{% if film.genres %} · {{ film.genres | join(', ') }}{% endif %}{% if film.duration_minutes %} · {{ film.duration_minutes }} min{% endif %}{% if film.description %} · {{ film.description | truncate(120) }}{% endif %}{% else %}{{ film.title }} {% if upcoming.get(film.id) %}opens {{ upcoming[film.id] }} in Ulaanbaatar: {% endif %}showtimes at {{ film.cinemas | map(attribute='name') | join(', ') }}{% if film.genres %} · {{ film.genres | join(', ') }}{% endif %}{% if film.duration_minutes %} · {{ film.duration_minutes }} min{% endif %}{% if film.rating %} · {{ film.rating }}{% endif %}{% if film.description %} · {{ film.description | truncate(120) }}{% endif %}{% endif %}{% endblock %}
 {% block og_type %}video.movie{% endblock %}
 {% block og_image %}{% if film.poster %}{{ film.poster }}{% else %}{{ site_url }}/static/og-image.png{% endif %}{% endblock %}
 
@@ -56,6 +56,15 @@
         .week .c.on { background: rgba(255,255,255,.06); }
         .week .c.on.has { color: var(--fg); }
 
+        .notice { margin-top: 56px; padding: 26px 28px; border: 1px solid var(--line-3); border-left: 3px solid var(--tengis); max-width: 640px; }
+        .notice .n-title { font-size: 34px; line-height: 1; margin-top: 6px; }
+        .notice p { font-size: 15px; line-height: 1.55; color: var(--fg-2); margin: 12px 0 0; }
+        .figures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; margin-top: 14px; padding-top: 18px; border-top: 1px solid var(--line-3); max-width: 640px; }
+        .figures .fig { font-size: 30px; line-height: 1; margin-top: 6px; }
+        .figures .k { font-size: 10.5px; color: var(--muted); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+        .source { font-size: 11px; color: var(--faint); font-weight: 600; margin-top: 14px; }
+        .source a { color: var(--muted); }
+
         .others { display: flex; align-items: flex-start; gap: 18px; margin-top: 14px; overflow-x: auto; padding-bottom: 6px; }
         .other { width: 130px; flex: none; text-decoration: none; opacity: .8; transition: opacity .2s, transform .2s; }
         .other:hover { opacity: 1; transform: translateY(-4px); }
@@ -72,6 +81,7 @@
             .row { grid-template-columns: 1fr; gap: 10px; }
             .sel-long { font-size: 32px; }
             .week { grid-template-columns: 90px repeat(7, minmax(0, 1fr)); font-size: 10px; }
+            .figures .fig { font-size: 22px; }
         }
 {% endblock %}
 
@@ -91,9 +101,13 @@
             <div class="hero-poster">{% if film.poster %}<img src="{{ film.poster }}" alt="{{ film.title }} poster">{% endif %}</div>
             <div class="fadeup" style="min-width:0;padding-bottom:10px">
                 {% set opening = upcoming.get(film.id) %}
+                {% if film.box_office %}
+                <div class="kicker">#{{ film.box_office.rank }} worldwide box office {{ film.box_office.year }} · Not showing in Ulaanbaatar</div>
+                {% else %}
                 <div class="kicker">{% if opening %}Coming soon · from <span id="opening">{{ opening }}</span>{% else %}Now showing{% endif %} · {{ film.cinemas | length }} cinema{{ 's' if film.cinemas | length != 1 }}</div>
+                {% endif %}
                 <h1 class="title oswald">{{ film.title }}</h1>
-                <div class="chips" id="chips"></div>
+                <div class="chips" id="chips">{% if film.box_office %}{% if film.rating %}<span>{{ film.rating }}</span>{% endif %}{% if film.duration_minutes %}<span>{{ film.duration_minutes }} min</span>{% endif %}{% endif %}</div>
             </div>
         </div>
     </div>
@@ -101,13 +115,19 @@
     <div class="wrap body">
         <div class="facts">
             {% if film.genres %}<div><div class="k">Genre</div><div class="v">{{ film.genres | join(', ') }}</div></div>{% endif %}
-            {% if film.duration_minutes or film.duration %}<div><div class="k">Running time</div><div class="v" id="duration">{{ film.duration }}</div></div>{% endif %}
+            {% if film.duration_minutes or film.duration %}<div><div class="k">Running time</div><div class="v" id="duration">{% if film.box_office %}{{ film.duration_minutes // 60 }} h {{ '%02d' % (film.duration_minutes % 60) }} · {{ film.duration_minutes }} min{% else %}{{ film.duration }}{% endif %}</div></div>{% endif %}
             {% if film.rating %}<div><div class="k">Rating</div><div class="v">{{ film.rating }}</div></div>{% endif %}
             {% if film.start_date %}<div><div class="k">In cinemas from</div><div class="v">{{ film.start_date }}</div></div>{% endif %}
+            {% if film.box_office %}
+            {% if film.box_office.release_date %}<div><div class="k">First released</div><div class="v">{{ film.box_office.release_date }}</div></div>{% endif %}
+            {% if film.box_office.distributor %}<div><div class="k">Distributor (US)</div><div class="v">{{ film.box_office.distributor }}</div></div>{% endif %}
+            {% if film.box_office.budget %}<div><div class="k">Budget</div><div class="v">{{ film.box_office.budget | short_money }}</div></div>{% endif %}
+            {% else %}
             <div><div class="k">Listed as</div>
                 <div style="display:flex;flex-direction:column;gap:4px;margin-top:4px">
                     {% for cinema in film.cinemas %}<div class="alias"><span class="dot" data-cinema="{{ cinema.name }}"></span><span>{{ film.titles[cinema.name] or film.title }} — {{ cinema.name }}</span></div>{% endfor %}
                 </div></div>
+            {% endif %}
             {% if not static_mode %}<button class="watch" onclick="addToWatchlist()">+ Add to watchlist</button>{% endif %}
         </div>
 
@@ -115,6 +135,29 @@
             {% if film.description %}<p class="synopsis">{{ film.description }}</p>{% endif %}
             <button class="share-btn" type="button" id="share" data-title="{{ film.title }}" onclick="shareFilm(this)">SHARE</button>
 
+            {% if film.box_office %}
+            <div class="notice">
+                <div class="label">Screenings</div>
+                <div class="n-title oswald">Not showing in Ulaanbaatar</div>
+                <p>There are no screenings of this film in Ulaanbaatar: the cinemas have decided not to show it. Urgoo, Tengis, Prime Cineplex, Skywing and CinemaNext have no showtimes or tickets for it.</p>
+            </div>
+
+            <div class="label" style="margin-top:56px">Box office · #{{ film.box_office.rank }} worldwide in {{ film.box_office.year }}</div>
+            <div class="figures">
+                <div><div class="k">Worldwide</div><div class="fig oswald" title="{{ '${:,}'.format(film.box_office.worldwide) }}">{{ film.box_office.worldwide | short_money }}</div></div>
+                <div><div class="k">US &amp; Canada</div><div class="fig oswald" title="{{ '${:,}'.format(film.box_office.domestic) }}">{{ film.box_office.domestic | short_money if film.box_office.domestic else '—' }}</div></div>
+                <div><div class="k">Rest of world</div><div class="fig oswald" title="{{ '${:,}'.format(film.box_office.international) }}">{{ film.box_office.international | short_money if film.box_office.international else '—' }}</div></div>
+            </div>
+            <div class="source">Figures from <a href="{{ film.box_office.url }}" target="_blank" rel="noopener">Box Office Mojo</a>, updated {{ film.box_office.scraped_at[:10] }}.</div>
+
+            {% set now_showing = movies | rejectattr('id', 'in', upcoming) | list %}
+            {% if now_showing %}
+            <div class="label" style="margin-top:56px">Showing in Ulaanbaatar instead</div>
+            <div class="others">
+                {% for m in now_showing[:8] %}<a class="other" href="{{ film_href.replace('{id}', m.id | urlencode) }}"><div class="p">{% if m.poster %}<img src="{{ m.poster }}" alt="{{ m.title }} poster" loading="lazy">{% endif %}</div><div class="n oswald">{{ m.title }}</div></a>{% endfor %}
+            </div>
+            {% endif %}
+            {% else %}
             <div class="sched-head">
                 <div><div class="label">Screenings · <span id="selRel"></span></div><div class="sel-long oswald" id="selLong"></div></div>
                 <div class="label" id="dayCount"></div>
@@ -128,11 +171,15 @@
 
             <div class="label" style="margin-top:56px">Also showing <span id="alsoRel"></span></div>
             <div class="others" id="others"></div>
+            {% endif %}
         </div>
     </div>
 {% endblock %}
 
 {% block extra_js %}
+{% if film.box_office %}
+<script>document.getElementById('share').insertAdjacentHTML('afterbegin', SHARE_ICON);</script>
+{% else %}
 <script>
 const FILM = {{ film | tojson }};
 const DATA = {{ movies | tojson }};
@@ -201,4 +248,5 @@ async function addToWatchlist() {
     } catch (e) { showToast('Error: ' + e.message, 'error'); }
 }
 </script>
+{% endif %}
 {% endblock %}
