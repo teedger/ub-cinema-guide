@@ -26,13 +26,14 @@
         .count { font-size: 12px; color: var(--muted); font-weight: 700; }
         .pills { display: flex; gap: 4px; flex-wrap: wrap; }
         .filter-side { display: flex; align-items: center; gap: 4px 12px; flex-wrap: wrap; justify-content: flex-end; }
-        .selects { display: flex; gap: 4px; }
+        .selects { display: flex; gap: 4px; flex-wrap: wrap; }
         .select { appearance: none; -webkit-appearance: none; padding: 7px 30px 7px 12px; border-radius: 999px; font: 700 12px 'Manrope', sans-serif; cursor: pointer; color: var(--muted); background: transparent no-repeat right 11px center / 10px 6px;
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238c8c85' stroke-width='1.6'/%3E%3C/svg%3E"); border: 1px solid var(--line-3); outline: none; }
         .select:hover, .select:focus-visible { border-color: var(--muted); }
         .select.on { background-color: var(--fg); color: var(--bg); border-color: var(--fg);
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%230e0e0e' stroke-width='1.6'/%3E%3C/svg%3E"); }
         .select option { background: var(--bg); color: var(--fg); }
+        #cinema { display: none; }
 
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 28px 20px; padding-top: 24px; padding-bottom: 64px; flex: 1; }
         .card { cursor: pointer; opacity: .75; transition: opacity .2s, transform .2s; }
@@ -88,6 +89,8 @@
             .hero-poster { width: 200px; min-height: 0; margin: 0 auto; }
             .hero-groups { gap: 18px; }
             .filters { padding-top: 36px; }
+            .pills { display: none; }
+            #cinema { display: block; }
             .grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 22px 14px; }
             .card .title { font-size: 18px; }
             .top-num { font-size: 140px; margin-top: 44px; margin-right: -9px; }
@@ -126,6 +129,7 @@
         <div class="filter-side">
             <div class="pills" id="pills"></div>
             <div class="selects">
+                <select class="select" id="cinema" aria-label="Filter by cinema"><option value="">All cinemas</option></select>
                 <select class="select" id="genre" aria-label="Filter by genre"><option value="">All genres</option></select>
                 <select class="select" id="rating" aria-label="Filter by rating"><option value="">All ratings</option></select>
             </div>
@@ -233,6 +237,8 @@ function render(scrollToHero = false) {
         b.onclick = () => { state.cinema = c; render(); };
         pills.appendChild(b);
     }
+    const cinemaSelect = document.getElementById('cinema');
+    cinemaSelect.value = state.cinema || ''; cinemaSelect.classList.toggle('on', !!state.cinema);
 
     // grid
     document.getElementById('grid').innerHTML = visible.length ? visible.map(({ m, groups }) => `
@@ -274,6 +280,11 @@ for (const [id, values] of [['genre', [...new Set(DATA.flatMap(m => m.genres || 
     el.insertAdjacentHTML('beforeend', values.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join(''));
     el.onchange = () => { state[id] = el.value; el.classList.toggle('on', !!el.value); render(); };
 }
+// On phones the cinema pills become a dropdown like genre and rating; render() keeps the two in step.
+const cinemaSelect = document.getElementById('cinema');
+cinemaSelect.insertAdjacentHTML('beforeend', ORDER.filter(n => DATA.some(m => m.cinemas.some(x => x.name === n)))
+    .map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join(''));
+cinemaSelect.onchange = () => { state.cinema = cinemaSelect.value || null; render(); };
 render();
 </script>
 {% endblock %}
