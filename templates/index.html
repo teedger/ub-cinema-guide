@@ -84,13 +84,19 @@
         .top-src a { color: var(--muted); }
         @media (pointer: coarse) { .top-nav { display: none; } }
 
-        @media (max-width: 760px) {
-            .hero-grid { grid-template-columns: 1fr; gap: 24px; padding-top: 28px; }
-            .hero-poster { width: 200px; min-height: 0; margin: 0 auto; }
-            .hero-groups { gap: 18px; }
-            .filters { padding-top: 36px; }
+        /* Three views: desktop; tablet up to 1194px (iPad Pro 11" landscape), where the poster stacks above the
+           showtimes so the cinema groups get the full width and the cinema pills become a dropdown; and phone. */
+        @media (max-width: 1194px) {
+            .hero-grid { grid-template-columns: minmax(0, 1fr); gap: 28px; padding-top: 40px; }
+            .hero-poster { width: 270px; min-height: 0; margin: 0 auto; }
             .pills { display: none; }
             #cinema { display: block; }
+        }
+        @media (max-width: 760px) {
+            .hero-grid { gap: 24px; padding-top: 28px; }
+            .hero-poster { width: 200px; }
+            .hero-groups { gap: 18px; }
+            .filters { padding-top: 36px; }
             .grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 22px 14px; }
             .card .title { font-size: 18px; }
             .top-num { font-size: 140px; margin-top: 44px; margin-right: -9px; }
@@ -280,7 +286,7 @@ for (const [id, values] of [['genre', [...new Set(DATA.flatMap(m => m.genres || 
     el.insertAdjacentHTML('beforeend', values.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join(''));
     el.onchange = () => { state[id] = el.value; el.classList.toggle('on', !!el.value); render(); };
 }
-// On phones the cinema pills become a dropdown like genre and rating; render() keeps the two in step.
+// On tablets and phones the cinema pills become a dropdown like genre and rating; render() keeps the two in step.
 const cinemaSelect = document.getElementById('cinema');
 cinemaSelect.insertAdjacentHTML('beforeend', ORDER.filter(n => DATA.some(m => m.cinemas.some(x => x.name === n)))
     .map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join(''));
