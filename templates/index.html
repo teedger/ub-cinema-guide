@@ -27,13 +27,15 @@
         .pills { display: flex; gap: 4px; flex-wrap: wrap; }
         .filter-side { display: flex; align-items: center; gap: 4px 12px; flex-wrap: wrap; justify-content: flex-end; }
         .selects { display: flex; gap: 4px; flex-wrap: wrap; }
-        .select { appearance: none; -webkit-appearance: none; padding: 7px 30px 7px 12px; border-radius: 999px; font: 700 12px 'Manrope', sans-serif; cursor: pointer; color: var(--muted); background: transparent no-repeat right 11px center / 10px 6px;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238c8c85' stroke-width='1.6'/%3E%3C/svg%3E"); border: 1px solid var(--line-3); outline: none; }
-        .select:hover, .select:focus-visible { border-color: var(--muted); }
-        .select.on { background-color: var(--fg); color: var(--bg); border-color: var(--fg);
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%230e0e0e' stroke-width='1.6'/%3E%3C/svg%3E"); }
-        .select option { background: var(--bg); color: var(--fg); }
-        #cinema { display: none; }
+        /* Dropdowns are pills with an invisible native select laid over them: they match the cinema pills exactly,
+           and the select keeps the 16px touch-screen text (base.html) so iOS doesn't zoom, while the pill shows 12px. */
+        .pick { position: relative; }
+        .pick svg { width: 10px; height: 6px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+        .pick select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; appearance: none; -webkit-appearance: none; border: 0; }
+        .pick select option { background: var(--bg); color: var(--fg); }
+        .pick:hover, .pick:has(select:focus-visible) { border-color: var(--muted); }
+        .pick.on:hover { border-color: var(--fg); }
+        #cinemaPick { display: none; }
 
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 28px 20px; padding-top: 24px; padding-bottom: 64px; flex: 1; }
         .card { cursor: pointer; opacity: .75; transition: opacity .2s, transform .2s; }
@@ -90,7 +92,7 @@
             .hero-grid { grid-template-columns: minmax(0, 1fr); gap: 28px; padding-top: 40px; }
             .hero-poster { width: 270px; min-height: 0; margin: 0 auto; }
             .pills { display: none; }
-            #cinema { display: block; }
+            #cinemaPick { display: inline-flex; }
         }
         @media (max-width: 760px) {
             .hero-grid { gap: 24px; padding-top: 28px; }
@@ -135,9 +137,9 @@
         <div class="filter-side">
             <div class="pills" id="pills"></div>
             <div class="selects">
-                <select class="select" id="cinema" aria-label="Filter by cinema"><option value="">All cinemas</option></select>
-                <select class="select" id="genre" aria-label="Filter by genre"><option value="">All genres</option></select>
-                <select class="select" id="rating" aria-label="Filter by rating"><option value="">All ratings</option></select>
+                <label class="pill pick" id="cinemaPick"><span>All cinemas</span><svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4"/></svg><select id="cinema" aria-label="Filter by cinema"><option value="">All cinemas</option></select></label>
+                <label class="pill pick" id="genrePick"><span>All genres</span><svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4"/></svg><select id="genre" aria-label="Filter by genre"><option value="">All genres</option></select></label>
+                <label class="pill pick" id="ratingPick"><span>All ratings</span><svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4"/></svg><select id="rating" aria-label="Filter by rating"><option value="">All ratings</option></select></label>
             </div>
         </div>
     </div>
@@ -244,7 +246,7 @@ function render(scrollToHero = false) {
         pills.appendChild(b);
     }
     const cinemaSelect = document.getElementById('cinema');
-    cinemaSelect.value = state.cinema || ''; cinemaSelect.classList.toggle('on', !!state.cinema);
+    cinemaSelect.value = state.cinema || ''; showPick(cinemaSelect);
 
     // grid
     document.getElementById('grid').innerHTML = visible.length ? visible.map(({ m, groups }) => `
@@ -278,13 +280,19 @@ function render(scrollToHero = false) {
 }
 document.getElementById('q').addEventListener('input', e => { state.query = e.target.value; render(); });
 
+// A dropdown's pill shows the chosen option, filled in like a selected pill when it narrows the list.
+function showPick(el) {
+    el.parentNode.firstChild.textContent = el.selectedOptions[0].textContent;
+    el.parentNode.classList.toggle('on', !!el.value);
+}
+
 // Genre and rating dropdowns: genres and ratings are standardised across cinemas by merge.py (categories.py).
 const RATING_ORDER = ['G', 'PG', 'PG-13', 'R'];
 for (const [id, values] of [['genre', [...new Set(DATA.flatMap(m => m.genres || []))].sort()],
                             ['rating', RATING_ORDER.filter(r => DATA.some(m => m.rating === r))]]) {
     const el = document.getElementById(id);
     el.insertAdjacentHTML('beforeend', values.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join(''));
-    el.onchange = () => { state[id] = el.value; el.classList.toggle('on', !!el.value); render(); };
+    el.onchange = () => { state[id] = el.value; showPick(el); render(); };
 }
 // On tablets and phones the cinema pills become a dropdown like genre and rating; render() keeps the two in step.
 const cinemaSelect = document.getElementById('cinema');
