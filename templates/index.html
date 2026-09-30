@@ -86,9 +86,9 @@
         .top-src a { color: var(--muted); }
         @media (pointer: coarse) { .top-nav { display: none; } }
 
-        /* Three views: desktop; tablet up to 1194px (iPad Pro 11" landscape), where the poster stacks above the
+        /* Three views: desktop; tablet up to 1080px (portrait iPads; landscape ones get desktop), where the poster stacks above the
            showtimes so the cinema groups get the full width and the cinema pills become a dropdown; and phone. */
-        @media (max-width: 1194px) {
+        @media (max-width: 1080px) {
             .hero-grid { grid-template-columns: minmax(0, 1fr); gap: 28px; padding-top: 40px; }
             .hero-poster { width: 270px; min-height: 0; margin: 0 auto; }
             .pills { display: none; }
