@@ -4,7 +4,8 @@
 Reads output/latest.json (written by scraper_ultimate.py) and writes:
     site/index.html          the guide with the data embedded
     site/film/<id>.html      one detail page per film (shareable, with og: tags), plus one
-                             for each box office top-10 film no Ulaanbaatar cinema shows
+                             for each box office top-10 film no Ulaanbaatar cinema shows,
+                             and a redirect at each old id of a film merged from several titles
     site/404.html            served for missing paths, e.g. old links to films no longer showing
     site/data/latest.json    the same data for anyone who wants it raw
     site/.nojekyll           so Pages serves the files as they are
@@ -16,6 +17,7 @@ Exits non-zero when there is nothing to publish, so a broken scrape never
 replaces a good deployment.
 """
 
+import html
 import json
 import os
 import shutil
@@ -33,6 +35,19 @@ SITE_DIR = os.path.join(BASE_DIR, "site")
 CUSTOM_DOMAIN = "ubcinema.info"
 SITE_URL = seo.SITE_URL
 MIN_FILMS = 1
+
+
+def redirect_page(target, title):
+    """A page at a film's old address that forwards to its current one. GitHub Pages has
+    no server-side redirects; search engines treat an instant meta refresh plus a
+    canonical link as a permanent redirect."""
+    target, title = html.escape(target), html.escape(title)
+    return (f'<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
+            f'<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+            f'<title>{title} · UB Cinema Guide</title>\n<link rel="canonical" href="{target}">\n'
+            f'<meta http-equiv="refresh" content="0; url={target}">\n'
+            f'<style>body{{background:#0e0e0e;color:#f5f5f0;font-family:system-ui,sans-serif;padding:16px}}a{{color:inherit}}</style>\n'
+            f'</head>\n<body><p>This film has moved to <a href="{target}">{title}</a>.</p></body>\n</html>\n')
 
 
 def build():
@@ -64,6 +79,13 @@ def build():
                                    jsonld=seo.movie_jsonld(movie, page_url, SITE_URL, today=meta["date"]))
             with open(os.path.join(SITE_DIR, "film", f"{movie['id']}.html"), "w", encoding="utf-8") as f:
                 f.write(page)
+        for movie in movies:
+            for alias in movie.get("aliases", []):
+                path = os.path.join(SITE_DIR, "film", f"{alias}.html")
+                if os.path.exists(path):  # a box office film's page has that id
+                    continue
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(redirect_page(seo.film_url(movie["id"], SITE_URL), movie["title"]))
         # GitHub Pages serves this for any missing path, e.g. a shared link to a film that has left cinemas.
         lost = render_template("404.html", movies=movies, meta=meta, upcoming=upcoming, static_mode=True,
                                home_href="/", data_href="/data/latest.json", film_href="/film/{id}.html", site_url=SITE_URL)

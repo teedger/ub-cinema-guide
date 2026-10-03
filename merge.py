@@ -1,12 +1,22 @@
 #!/usr/bin/env python3
 """Combine movie records from several cinemas into one entry per film.
 
-Matching is done on a *normalized* title: lower-cased, punctuation removed and
-format/marketing tokens (IMAX, 3D, 4DX, МУСК ...) dropped. Two titles are the
-same film when the normalized forms are equal, or when they share a meaningful
-token and fuzz.token_set_ratio is high. Manual overrides live in
-files/title_aliases.json ({"Тосгон МУСК": "Тосгон"}) for the cases fuzzy
-matching can't see, e.g. a Mongolian title on one site and English on another.
+Matching is done on a *normalized* title: lower-cased, punctuation removed,
+Latin look-alike letters inside Mongolian words turned Cyrillic ("Сайxан") and
+format/marketing tokens (IMAX, 3D, 4DX, МУСК ...) dropped. A bilingual title
+("Reawaken Man: The Red - Дахин Амилсан Эр") is also matched on each half.
+
+Two records are the same film when any of these holds:
+  - their titles are equal, or share a meaningful token and fuzz.token_set_ratio
+    is high;
+  - they link the same YouTube trailer;
+  - they have the same synopsis (the distributor's text, which cinemas copy and
+    which also links an English title to a Mongolian one);
+  - they open on the same day, run within a few minutes of each other and their
+    titles are loosely alike ("Reawakened Man" / "Reawaken Man: The Red").
+Matches are transitive, so one cinema's bilingual title joins another's English
+title with a third's Mongolian one. Manual overrides live in
+files/title_aliases.json ({"Тосгон МУСК": "Тосгон"}) for anything left over.
 """
 
 import json
@@ -27,6 +37,26 @@ FORMAT_LABELS = {"imax": "IMAX", "3d": "3D", "4dx": "4DX"}
 
 CINEMA_PRIORITY = ["Urgoo", "Tengis", "Prime Cineplex", "Skywing", "CinemaNext"]
 MATCH_THRESHOLD = 90
+# Looser title match (fuzz.token_sort_ratio, which unlike token_set_ratio doesn't
+# score "Heart of the Beast" high against "Shaun the Sheep: The Beast of ..."),
+# accepted only for films that open on the same day and run within
+# RUNTIME_TOLERANCE minutes of each other.
+LOOSE_MATCH_THRESHOLD = 75
+RUNTIME_TOLERANCE = 3
+# Synopses are compared on their opening; one site may cut the text short.
+SYNOPSIS_PREFIX = 150
+SYNOPSIS_MIN_LENGTH = 60
+SYNOPSIS_THRESHOLD = 90
+
+# Latin letters typed in place of the Cyrillic letters they look like (lower case,
+# since titles are lower-cased first): Tengis writes "Сайxан", "Үхлийн Tойрог".
+# Y is left alone: in Mongolian it could stand for У or Ү.
+LATIN_LOOKALIKES = str.maketrans("abcehkmoptx", "авсенкмортх")
+LATIN_LOOKALIKES_UPPER = str.maketrans("ABCEHKMOPTX", "АВСЕНКМОРТХ")
+CYRILLIC = re.compile(r"[\u0400-\u04ff]")
+LATIN = re.compile(r"[a-zA-Z]")
+# " - ", " / " or " | " between an English and a Mongolian title.
+BILINGUAL_SEPARATOR = re.compile(r"\s+[-–—/|]\s+")
 
 
 def load_aliases():
@@ -37,15 +67,44 @@ def load_aliases():
     return {normalize_title(k): v for k, v in data.items()}
 
 
-def tokens(title):
-    text = unicodedata.normalize("NFKC", clean_text(title)).lower()
+def fix_lookalikes(text):
+    """'Алдааны Сайxан UBIFF' -> 'Алдааны Сайхан UBIFF': Latin letters inside a word
+    that also has Cyrillic letters are typos for their Cyrillic twins."""
+    def fix(match):
+        word = match.group(0)
+        if not CYRILLIC.search(word):
+            return word
+        return word.translate(LATIN_LOOKALIKES_UPPER).translate(LATIN_LOOKALIKES)
+    return re.sub(r"\w+", fix, text)
+
+
+def tokens(title, fix_typos=True):
+    text = unicodedata.normalize("NFKC", clean_text(title))
+    text = (fix_lookalikes(text) if fix_typos else text).lower()
     text = re.sub(r"[^\w\s]", " ", text)
     return [t for t in text.split() if t]
 
 
-def normalize_title(title):
+def script(text):
+    """'latin', 'cyrillic' or '' (no letters, or a mix) for a piece of a title."""
+    latin, cyrillic = bool(LATIN.search(text)), bool(CYRILLIC.search(text))
+    return "latin" if latin and not cyrillic else "cyrillic" if cyrillic and not latin else ""
+
+
+def title_variants(title):
+    """The title, plus each half of an English/Mongolian bilingual title:
+    'Reawaken Man: The Red - Дахин Амилсан Эр' -> [whole, 'Reawaken Man: The Red', 'Дахин Амилсан Эр'].
+    A prefix in the same script ('ХКӨ - Фиорд') is not split off: it is part of the title."""
+    text = fix_lookalikes(clean_text(title))
+    parts = BILINGUAL_SEPARATOR.split(text)
+    if len(parts) == 2 and {script(parts[0]), script(parts[1])} == {"latin", "cyrillic"}:
+        return [text] + parts
+    return [text]
+
+
+def normalize_title(title, fix_typos=True):
     """Lower-cased title without punctuation or format tokens."""
-    return " ".join(t for t in tokens(title) if t not in FORMAT_TOKENS)
+    return " ".join(t for t in tokens(title, fix_typos) if t not in FORMAT_TOKENS)
 
 
 def format_from_title(title):
@@ -56,7 +115,7 @@ def format_from_title(title):
 
 def display_title(title):
     """Title with format tokens removed, keeping the original casing/punctuation."""
-    words = [w for w in clean_text(title).split(" ") if w.lower().strip(":()[]") not in FORMAT_TOKENS]
+    words = [w for w in fix_lookalikes(clean_text(title)).split(" ") if w.lower().strip(":()[]") not in FORMAT_TOKENS]
     return re.sub(r"\s+", " ", " ".join(words)).strip(" :-–")
 
 
@@ -73,37 +132,105 @@ def titles_match(a, b):
     return fuzz.token_set_ratio(na, nb) >= MATCH_THRESHOLD
 
 
-def match_key(title, aliases):
-    """Alias-aware normalized title used for clustering."""
-    n = normalize_title(title)
-    return normalize_title(aliases.get(n, n))
+def match_keys(title, aliases):
+    """Alias-aware normalized forms of the title and of each half of a bilingual title."""
+    keys = []
+    for variant in title_variants(title):
+        n = normalize_title(variant)
+        key = normalize_title(aliases.get(n, n))
+        if key and key not in keys:
+            keys.append(key)
+    return keys
 
 
-def slugify(text):
-    slug = re.sub(r"[^\w]+", "-", normalize_title(text)).strip("-")
+def slugify(text, fix_typos=True):
+    slug = re.sub(r"[^\w]+", "-", normalize_title(text, fix_typos)).strip("-")
     return slug or "movie"
 
 
+def title_slugs(title):
+    """Every id a page for this title may have had: from the title as is, and from the
+    title before Latin look-alike letters were fixed ('алдааны-сайxан-ubiff')."""
+    return {slugify(title), slugify(title, fix_typos=False)}
+
+
+def synopsis_key(movie):
+    """The opening of the synopsis, normalized, or '' when it is too short to tell films apart."""
+    text = " ".join(tokens(movie.get("description") or ""))
+    return text[:SYNOPSIS_PREFIX] if len(text) >= SYNOPSIS_MIN_LENGTH else ""
+
+
+def shared_values(movies, aliases, value):
+    """Values of value(record) one cinema uses for several different films (a festival
+    blurb as synopsis, a promo reel as trailer), which say nothing about which film a
+    record is."""
+    seen, shared = {}, set()
+    for m in movies:
+        key = value(m)
+        if not key:
+            continue
+        film = tuple(match_keys(m["title"], aliases)[:1])
+        if seen.setdefault((m["cinema"], key), film) != film:
+            shared.add(key)
+    return shared
+
+
+def same_opening(a, b):
+    """Both open on the same day and run within RUNTIME_TOLERANCE minutes of each other."""
+    da, db = a.get("duration_minutes"), b.get("duration_minutes")
+    return (bool(a.get("start_date")) and a.get("start_date") == b.get("start_date")
+            and bool(da) and bool(db) and abs(da - db) <= RUNTIME_TOLERANCE)
+
+
+def records_match(a, b, boilerplate=frozenset()):
+    """Whether two prepared records (see cluster_movies) are the same film. Synopses
+    and trailers in `boilerplate` don't count."""
+    if any(ka == kb or titles_match(ka, kb) for ka in a["_keys"] for kb in b["_keys"]):
+        return True
+    if a.get("trailer") and a.get("trailer") == b.get("trailer") and a["trailer"] not in boilerplate:
+        return True
+    sa, sb = a["_synopsis"], b["_synopsis"]
+    if sa and sb and sa not in boilerplate and sb not in boilerplate:
+        # Compare equal lengths so a synopsis cut short still matches the full one.
+        n = min(len(sa), len(sb))
+        if fuzz.ratio(sa[:n], sb[:n]) >= SYNOPSIS_THRESHOLD:
+            return True
+    if same_opening(a, b):
+        return any(script(ka) == script(kb) != "" and fuzz.token_sort_ratio(ka, kb) >= LOOSE_MATCH_THRESHOLD
+                   for ka in a["_keys"] for kb in b["_keys"])
+    return False
+
+
 def cluster_movies(movies, aliases=None):
-    """Group movie records that are the same film. Returns a list of lists."""
+    """Group movie records that are the same film. Returns a list of lists, each in
+    cinema priority order. Every pair of records is compared and matches are joined
+    transitively, so the result doesn't depend on which cinema is read first."""
     aliases = aliases if aliases is not None else load_aliases()
     ordered = sorted(movies, key=lambda m: (
         CINEMA_PRIORITY.index(m["cinema"]) if m["cinema"] in CINEMA_PRIORITY else 99,
         -len(m.get("title", "")),
     ))
-    clusters = []
-    for movie in ordered:
-        key = match_key(movie["title"], aliases)
-        target = None
-        for cluster in clusters:
-            if any(key == c["_key"] or titles_match(key, c["_key"]) for c in cluster):
-                target = cluster
-                break
-        if target is None:
-            target = []
-            clusters.append(target)
-        target.append({**movie, "_key": key})
-    return [[{k: v for k, v in m.items() if k != "_key"} for m in cluster] for cluster in clusters]
+    records = [{**m, "_keys": match_keys(m["title"], aliases), "_synopsis": synopsis_key(m)} for m in ordered]
+    boilerplate = (shared_values(ordered, aliases, synopsis_key)
+                   | shared_values(ordered, aliases, lambda m: m.get("trailer")))
+
+    parent = list(range(len(records)))
+
+    def root(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for i in range(len(records)):
+        for j in range(i + 1, len(records)):
+            if root(i) != root(j) and records_match(records[i], records[j], boilerplate):
+                parent[max(root(i), root(j))] = min(root(i), root(j))
+
+    clusters = {}
+    for i, movie in enumerate(ordered):
+        clusters.setdefault(root(i), []).append(movie)
+    return list(clusters.values())
 
 
 def first_nonempty(cluster, field):
@@ -170,6 +297,9 @@ def merge_cluster(cluster):
     descriptions = [m["description"] for m in cluster if m.get("description")]
     return {
         "id": slugify(title),
+        # Ids this film's page went by while some cinema's title was a film of its own,
+        # e.g. 'reawakened-man'; merge_movies keeps the ones no other film uses.
+        "aliases": sorted(set().union(*(title_slugs(m["title"]) for m in cluster))),
         "title": title,
         "titles": {m["cinema"]: m["title"] for m in cluster},
         "description": max(descriptions, key=len) if descriptions else "",
@@ -208,4 +338,13 @@ def merge_movies(movies, aliases=None):
         seen[m["id"]] = n + 1
         if n:
             m["id"] = f"{m['id']}-{n + 1}"
+    # An alias only redirects when it is unambiguous: not a current film's id and
+    # not claimed by two films.
+    ids = {m["id"] for m in merged}
+    claims = {}
+    for m in merged:
+        for alias in m["aliases"]:
+            claims[alias] = claims.get(alias, 0) + 1
+    for m in merged:
+        m["aliases"] = [a for a in m["aliases"] if a not in ids and claims[a] == 1]
     return merged

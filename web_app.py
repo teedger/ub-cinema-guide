@@ -10,7 +10,7 @@ import datetime
 import os
 from threading import Thread
 
-from flask import Flask, abort, jsonify, render_template, request
+from flask import Flask, abort, jsonify, redirect, render_template, request, url_for
 
 import boxoffice
 import scraper_ultimate
@@ -83,6 +83,10 @@ def film(film_id):
         elsewhere = boxoffice.not_showing_films(boxoffice.link_to_guide(boxoffice.load(), data["movies"]))
         movie = next((m for m in elsewhere if m["id"] == film_id), None)
     if movie is None:
+        # An old link to a page merged into another film's, e.g. /film/reawakened-man.
+        merged = next((m for m in data["movies"] if film_id in m.get("aliases", [])), None)
+        if merged:
+            return redirect(url_for("film", film_id=merged["id"]), 301)
         abort(404)
     return render_template("film.html", film=movie, movies=data["movies"],
                            jsonld=seo.movie_jsonld(movie, seo.film_url(film_id), today=data.get("date")), **page_context(data))
