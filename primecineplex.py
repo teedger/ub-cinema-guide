@@ -27,6 +27,9 @@ TIME_PATTERN = re.compile(r"^(\d{1,2}:\d{2})\s*(.*)$")
 # Legend printed under every film on the site.
 HALL_NAMES = {"G": "General", "AT": "Atmos", "P": "Premium", "VIP": "VIP",
               "PC": "Premium & Couple", "4DX": "4DX", "R": "Regular"}
+# The homepage only covers today and tomorrow, yet now and then lists a show dated
+# e.g. 10/3/2100 (a placeholder on Prime's side). Shows further out than this are dropped.
+MAX_DAYS_AHEAD = 7
 
 
 def absolute(href):
@@ -49,7 +52,8 @@ def booking_params(href):
 
 def parse_homepage(html):
     soup = BeautifulSoup(html, "html.parser")
-    movies, seen_shows = {}, set()
+    movies, seen_shows, placeholders = {}, set(), set()
+    last_day = (datetime.date.today() + datetime.timedelta(days=MAX_DAYS_AHEAD)).isoformat()
     # One <div id="tab_N" class="tab-content"> per day; jQuery UI adds ui-tabs-panel in a browser.
     for panel in soup.select("div[id^='tab_'], div.ui-tabs-panel"):
         grid = panel.select_one("div.three.column.grid")
@@ -95,14 +99,19 @@ def parse_homepage(html):
                     hall_code = match.group(2).strip() if match else params.get("AuditoriumName", "")
                     if not movie["genres"] and params.get("Genre"):
                         movie["genres"] = [g.strip() for g in params["Genre"].split(",") if g.strip()]
-                    movie["showtimes"].append(showtime(
+                    show = showtime(
                         params.get("ShowDate", ""), params.get("TheatreName") or branch, time_text,
                         hall=HALL_NAMES.get(hall_code, hall_code),
                         fmt=params.get("ShowCategory", fmt),
                         url=clean_booking_url(absolute(a["href"])),
                         available=params.get("occupancy", "").lower() not in ("sold out", "soldout"),
-                    ))
-    return list(movies.values())
+                    )
+                    if show["date"] > last_day:
+                        placeholders.add(event_id)
+                        continue
+                    movie["showtimes"].append(show)
+    # A film whose only shows were placeholders is not really on the schedule.
+    return [m for key, m in movies.items() if m["showtimes"] or key not in placeholders]
 
 
 def parse_upcoming(html):
