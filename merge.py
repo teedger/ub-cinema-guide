@@ -245,11 +245,10 @@ def standard_genres(cluster):
     genres = []
     for m in cluster:
         for name in m.get("genres") or []:
-            genre = categories.standard_genre(name)
-            if not genre:
+            found = categories.genres_of(name)
+            if not found:
                 print(f"⚠️ Unknown genre {name!r} from {m['cinema']} ({m['title']}): add it to categories.py")
-            elif genre not in genres:
-                genres.append(genre)
+            genres += [g for g in found if g not in genres]
     return genres
 
 
