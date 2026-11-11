@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""The year's top 10 films by worldwide box office, from Box Office Mojo.
+"""The top 10 films at the box office right now, with their worldwide totals, from Box Office Mojo.
 
     python boxoffice.py       # fetch and save output/boxoffice.json
 
-Reads Box Office Mojo's worldwide chart for the current year, sorts it by
-worldwide gross, and fetches each top-10 film's pages for its poster, synopsis,
-genres, running time, rating and release date.
-Early in January the new year's chart is nearly empty, so until it has ten
-films the previous year's chart is used instead.
+Box Office Mojo has no daily worldwide chart, so the ranking comes from its
+latest daily chart (US & Canada, /date/YYYY-MM-DD/). Each top-10 film's release
+group page then gives its worldwide, domestic and international totals, poster
+and IMDb id, and its title page the synopsis, genres, running time, rating and
+release date. A day's chart appears a day or two late, so the newest day that
+has one is used.
 
 Films the cinema guide also lists get a `film_id` at build time (see
 link_to_guide) so their poster opens the film's page with showtimes. The rest
@@ -34,6 +35,10 @@ ENGLISH = "en-US,en;q=0.9"  # Box Office Mojo localises dates and labels to the 
 ROW = re.compile(r"<tr>(.*?)</tr>", re.S)
 CELL = re.compile(r"<td[^>]*>(.*?)</td>", re.S)
 GROUP_LINK = re.compile(r'href="(/releasegroup/gr\d+/)')
+RELEASE_LINK = re.compile(r'href="(/release/rl\d+/)')
+DAYS_BACK = 7  # how far back to look for the newest daily chart
+# A release group page's totals, in the summary's text: 'Domestic (51%) $32,697,216 International (–) – Worldwide $2,340,591'
+TOTAL = re.compile(r"(Domestic|International|Worldwide)\s*(?:\([^)]*\))?\s*(\$[\d,]+|–)")
 # The small poster on a release group page; data-a-hires is the 2x version.
 POSTER = re.compile(r'<img[^>]*src="(https://m\.media-amazon\.com/images/M/[^"]+)"')
 IMDB_ID = re.compile(r'href="/title/(tt\d+)/')
@@ -48,21 +53,29 @@ def money(text):
     return int(digits) if digits else 0
 
 
-def chart(year):
-    """Every film on the worldwide chart for `year`, highest worldwide gross first."""
-    page = fetch_html(f"{MOJO}/year/world/{year}/", language=ENGLISH)
+def daily_chart(day):
+    """Every film on Box Office Mojo's daily chart for `day`, in chart order (highest daily gross first).
+    Empty when that day's chart is not out yet."""
+    page = fetch_html(f"{MOJO}/date/{day.isoformat()}/", language=ENGLISH)
     films = []
     for row in ROW.findall(page):
         cells = CELL.findall(row)
-        link = GROUP_LINK.search(row)
-        if len(cells) < 6 or not link:  # the header row has <th> cells and no link
+        link = RELEASE_LINK.search(row)
+        if len(cells) < 4 or not link:  # the header row has <th> cells and no link
             continue
         text = [clean_text(html.unescape(re.sub(r"<[^>]+>", "", c))) for c in cells]
-        films.append({"title": text[1], "worldwide": money(text[2]), "domestic": money(text[3]),
-                      "international": money(text[5]), "url": MOJO + link.group(1)})
-    # The chart is already in this order; sorting here keeps the ranking right even if it changes.
-    films.sort(key=lambda f: f["worldwide"], reverse=True)
+        films.append({"title": text[2], "daily": money(text[3]), "release_url": MOJO + link.group(1)})
     return films
+
+
+def latest_daily_chart(today):
+    """(day, films) for the newest daily chart, looking back from yesterday."""
+    for back in range(1, DAYS_BACK + 1):
+        day = today - datetime.timedelta(days=back)
+        films = daily_chart(day)
+        if films:
+            return day, films
+    raise RuntimeError(f"Box Office Mojo had no daily chart in the {DAYS_BACK} days before {today}")
 
 
 def poster_url(small):
@@ -81,14 +94,18 @@ def title_details(imdb):
     summary = SUMMARY.search(page)
     release = text_of(facts.get("Earliest Release Date", ""))
     release = re.sub(r"\s*\(.*\)$", "", release)  # 'July 15, 2026 (EMEA, APAC)' -> 'July 15, 2026'
+    release = re.sub(r"^[A-Z][a-z]{2}\s+", "", release)  # 'Tue Nov 3, 2026' -> 'Nov 3, 2026'
     try:
         release = datetime.datetime.strptime(release, "%B %d, %Y").date().isoformat()
     except ValueError:
-        release = normalize_date(release)
+        try:
+            release = datetime.datetime.strptime(release, "%b %d, %Y").date().isoformat()
+        except ValueError:
+            release = normalize_date(release)
     return {
         "description": text_of(summary.group(1)) if summary else "",
         # Genres come one per line: 'Action\n    \n    Adventure'
-        "genres": [g for g in (clean_text(x) for x in html.unescape(re.sub(r"<[^>]+>", "", facts.get("Genres", ""))).split("\n")) if g],
+        "genres": [g for g in (clean_text(x) for x in re.split(r"[\n·]", html.unescape(re.sub(r"<[^>]+>", "", facts.get("Genres", ""))))) if g],
         "rating": text_of(facts.get("MPAA", "")),
         "duration_minutes": parse_duration_minutes(text_of(facts.get("Running Time", "")).replace("hr", "h")),
         "release_date": release,
@@ -98,12 +115,23 @@ def title_details(imdb):
 
 
 def add_details(film):
-    """Poster and IMDb id from the release group page, then synopsis and facts from the title page.
-    Whatever cannot be fetched stays empty: a missing detail must not lose the whole chart."""
-    film.update({"poster": "", "imdb": "", "description": "", "genres": [], "rating": "", "duration_minutes": None,
+    """Release group link from the release page; worldwide totals, poster and IMDb id from the
+    release group page; then synopsis and facts from the title page. Whatever cannot be fetched
+    stays empty: a missing detail must not lose the whole chart."""
+    film.update({"url": film["release_url"], "worldwide": 0, "domestic": 0, "international": 0,
+                 "poster": "", "imdb": "", "description": "", "genres": [], "rating": "", "duration_minutes": None,
                  "release_date": "", "distributor": "", "budget": 0})
     try:
+        group = GROUP_LINK.search(fetch_html(film["release_url"], language=ENGLISH))
+        if group:
+            film["url"] = MOJO + group.group(1)
         page = fetch_html(film["url"], language=ENGLISH)
+        summary = page[page.find("mojo-performance-summary-table"):][:6000]
+        totals = {}
+        for label, value in TOTAL.findall(text_of(summary)):  # the per-area table further down repeats the labels
+            totals.setdefault(label.lower(), money(value))
+        film.update({k: totals.get(k, 0) for k in ("worldwide", "domestic", "international")})
+        film["worldwide"] = film["worldwide"] or film["domestic"] + film["international"]
         poster = POSTER.search(page)
         imdb = IMDB_ID.search(page)
         film["poster"] = poster_url(poster.group(1)) if poster else ""
@@ -117,26 +145,21 @@ def add_details(film):
 
 def top_films(today=None):
     today = today or datetime.date.today()
-    year = today.year
-    films = chart(year)
-    if len(films) < TOP_N:
-        year -= 1
-        films = chart(year)
-    if not films:
-        raise RuntimeError(f"Box Office Mojo's {year} worldwide chart had no films")
-    with ThreadPoolExecutor(max_workers=5) as pool:  # two pages per film; Box Office Mojo can be slow
+    day, films = latest_daily_chart(today)
+    with ThreadPoolExecutor(max_workers=5) as pool:  # three pages per film; Box Office Mojo can be slow
         top = list(pool.map(add_details, films[:TOP_N]))
     for rank, film in enumerate(top, 1):
         film["rank"] = rank
-    return {"scraped_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "year": year,
-            "source": f"{MOJO}/year/world/{year}/", "films": top}
+    return {"scraped_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "year": day.year,
+            "date": day.isoformat(), "label": f"{day:%b} {day.day}, {day.year}",
+            "source": f"{MOJO}/date/{day.isoformat()}/", "films": top}
 
 
 def save(payload):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     with open(BOXOFFICE_FILE, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
-    print(f"✅ Saved the {payload['year']} worldwide top {len(payload['films'])} to {BOXOFFICE_FILE}")
+    print(f"✅ Saved the top {len(payload['films'])} for {payload['label']} to {BOXOFFICE_FILE}")
 
 
 def load():
@@ -185,7 +208,7 @@ def not_showing_films(linked):
         "description": f.get("description", ""), "genres": f.get("genres", []),
         "duration": "", "duration_minutes": f.get("duration_minutes"), "rating": f.get("rating", ""),
         "start_date": "", "cinemas": [], "dates": [], "showtime_count": 0,
-        "box_office": {"rank": f["rank"], "year": linked["year"], "worldwide": f["worldwide"],
+        "box_office": {"rank": f["rank"], "year": linked["year"], "label": linked.get("label", linked["year"]), "worldwide": f["worldwide"],
                        "domestic": f["domestic"], "international": f["international"], "url": f["url"],
                        "source": linked["source"], "scraped_at": linked["scraped_at"],
                        "release_date": f.get("release_date", ""), "distributor": f.get("distributor", ""),
@@ -206,5 +229,5 @@ if __name__ == "__main__":
     data = top_films()
     save(data)
     for film in data["films"]:
-        print(f"{film['rank']:>2}. {film['title']} · {short_money(film['worldwide'])}" + ("" if film["poster"] else " (no poster)"))
+        print(f"{film['rank']:>2}. {film['title']} · {short_money(film['daily'])} that day · {short_money(film['worldwide'])} worldwide" + ("" if film["poster"] else " (no poster)"))
     sys.exit(0 if data["films"] else 1)

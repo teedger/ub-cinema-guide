@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}{% if film.box_office %}{{ film.title }}: not showing in Ulaanbaatar{% else %}{{ film.title }} showtimes in Ulaanbaatar{% endif %} · UB Cinema Guide{% endblock %}
-{% block description %}{% if film.box_office %}{{ film.title }}: #{{ film.box_office.rank }} at the {{ film.box_office.year }} worldwide box office with {{ film.box_office.worldwide | short_money }}, but no Ulaanbaatar cinema is showing it{% if film.genres %} · {{ film.genres | join(', ') }}{% endif %}{% if film.duration_minutes %} · {{ film.duration_minutes }} min{% endif %}{% if film.description %} · {{ film.description | truncate(120) }}{% endif %}{% else %}{{ film.title }} {% if upcoming.get(film.id) %}opens {{ upcoming[film.id] }} in Ulaanbaatar: {% endif %}showtimes at {{ film.cinemas | map(attribute='name') | join(', ') }}{% if film.genres %} · {{ film.genres | join(', ') }}{% endif %}{% if film.duration_minutes %} · {{ film.duration_minutes }} min{% endif %}{% if film.rating %} · {{ film.rating }}{% endif %}{% if film.description %} · {{ film.description | truncate(120) }}{% endif %}{% endif %}{% endblock %}
+{% block description %}{% if film.box_office %}{{ film.title }}: #{{ film.box_office.rank }} at the box office on {{ film.box_office.label }}, {{ film.box_office.worldwide | short_money }} worldwide, but no Ulaanbaatar cinema is showing it{% if film.genres %} · {{ film.genres | join(', ') }}{% endif %}{% if film.duration_minutes %} · {{ film.duration_minutes }} min{% endif %}{% if film.description %} · {{ film.description | truncate(120) }}{% endif %}{% else %}{{ film.title }} {% if upcoming.get(film.id) %}opens {{ upcoming[film.id] }} in Ulaanbaatar: {% endif %}showtimes at {{ film.cinemas | map(attribute='name') | join(', ') }}{% if film.genres %} · {{ film.genres | join(', ') }}{% endif %}{% if film.duration_minutes %} · {{ film.duration_minutes }} min{% endif %}{% if film.rating %} · {{ film.rating }}{% endif %}{% if film.description %} · {{ film.description | truncate(120) }}{% endif %}{% endif %}{% endblock %}
 {% block og_type %}video.movie{% endblock %}
 {% block og_image %}{% if film.poster %}{{ film.poster }}{% else %}{{ site_url }}/static/og-image.png{% endif %}{% endblock %}
 
@@ -116,7 +116,7 @@
             <div class="hero-text fadeup">
                 {% set opening = upcoming.get(film.id) %}
                 {% if film.box_office %}
-                <div class="kicker">#{{ film.box_office.rank }} worldwide box office {{ film.box_office.year }} · Not showing in Ulaanbaatar</div>
+                <div class="kicker">#{{ film.box_office.rank }} at the box office {{ film.box_office.label }} · Not showing in Ulaanbaatar</div>
                 {% else %}
                 <div class="kicker">{% if opening %}Coming soon · from <span id="opening">{{ opening }}</span>{% else %}Now showing{% endif %} · {{ film.cinemas | length }} cinema{{ 's' if film.cinemas | length != 1 }}</div>
                 {% endif %}
@@ -168,7 +168,7 @@
                 <p>There are no screenings of this film in Ulaanbaatar: the cinemas have decided not to show it. Urgoo, Tengis, Prime Cineplex, Skywing and CinemaNext have no showtimes or tickets for it.</p>
             </div>
 
-            <div class="label" style="margin-top:56px">Box office · #{{ film.box_office.rank }} worldwide in {{ film.box_office.year }}</div>
+            <div class="label" style="margin-top:56px">Box office · #{{ film.box_office.rank }} on {{ film.box_office.label }}</div>
             <div class="figures">
                 <div><div class="k">Worldwide</div><div class="fig oswald" title="{{ '${:,}'.format(film.box_office.worldwide) }}">{{ film.box_office.worldwide | short_money }}</div></div>
                 <div><div class="k">US &amp; Canada</div><div class="fig oswald" title="{{ '${:,}'.format(film.box_office.domestic) }}">{{ film.box_office.domestic | short_money if film.box_office.domestic else '—' }}</div></div>

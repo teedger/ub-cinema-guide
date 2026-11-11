@@ -169,7 +169,7 @@ def write_crawler_files(site_dir, movies, data, site_url=SITE_URL, upcoming=None
             lines.append(f"- [{m['title']}]({film_url(m['id'], site_url)})" + (f": {summary}" if summary else ""))
     if elsewhere:
         lines += ["", "## Box office top 10 films not showing in Ulaanbaatar", ""]
-        lines += [f"- [{m['title']}]({film_url(m['id'], site_url)}): #{m['box_office']['rank']} worldwide in {m['box_office']['year']}, "
+        lines += [f"- [{m['title']}]({film_url(m['id'], site_url)}): #{m['box_office']['rank']} at the box office on {m['box_office']['label']}, "
                   "no Ulaanbaatar cinema is showing it" for m in elsewhere]
     with open(os.path.join(site_dir, "llms.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
